@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <defs>
+    <!-- Gradient for quantum particles -->
+    <radialGradient id="quantumGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#4F46E5" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#4F46E5" stop-opacity="0"/>
+    </radialGradient>
+    
+    <!-- Gradient for neural connections -->
+    <linearGradient id="neuralGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#06B6D4"/>
+      <stop offset="100%" stop-color="#3B82F6"/>
+    </linearGradient>
+
+    <!-- Filter for glow effect -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="200" cy="200" r="180" fill="none" stroke="#1E293B" stroke-width="2">
+    <animate attributeName="stroke-dasharray" 
+             from="0,1130" to="1130,0"
+             dur="3s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Quantum orbital rings -->
+  <g transform="translate(200 200)">
+    <circle r="140" fill="none" stroke="#312E81" stroke-width="1" opacity="0.3">
+      <animateTransform attributeName="transform" type="rotate"
+                      from="0" to="360" dur="10s" repeatCount="indefinite"/>
+    </circle>
+    <circle r="100" fill="none" stroke="#312E81" stroke-width="1" opacity="0.3">
+      <animateTransform attributeName="transform" type="rotate"
+                      from="360" to="0" dur="8s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+
+  <!-- Neural network nodes -->
+  <g id="nodes">
+    <!-- Center node -->
+    <circle cx="200" cy="200" r="15" fill="#3B82F6" filter="url(#glow)">
+      <animate attributeName="r" values="15;17;15" dur="2s" repeatCount="indefinite"/>
+    </circle>
+
+    <!-- Outer nodes -->
+    <g id="outerNodes">
+      <circle cx="200" cy="80" r="10" fill="#06B6D4" filter="url(#glow)">
+        <animate attributeName="r" values="10;12;10" dur="2s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="320" cy="200" r="10" fill="#06B6D4" filter="url(#glow)">
+        <animate attributeName="r" values="10;12;10" dur="2s" repeatCount="indefinite" begin="0.5s"/>
+      </circle>
+      <circle cx="200" cy="320" r="10" fill="#06B6D4" filter="url(#glow)">
+        <animate attributeName="r" values="10;12;10" dur="2s" repeatCount="indefinite" begin="1s"/>
+      </circle>
+      <circle cx="80" cy="200" r="10" fill="#06B6D4" filter="url(#glow)">
+        <animate attributeName="r" values="10;12;10" dur="2s" repeatCount="indefinite" begin="1.5s"/>
+      </circle>
+    </g>
+  </g>
+
+  <!-- Neural connections -->
+  <g id="connections" stroke-width="2" stroke-linecap="round">
+    <line x1="200" y1="200" x2="200" y2="80" stroke="url(#neuralGradient)">
+      <animate attributeName="stroke-dasharray" 
+               values="0,120;120,0" dur="2s" repeatCount="indefinite"/>
+    </line>
+    <line x1="200" y1="200" x2="320" y2="200" stroke="url(#neuralGradient)">
+      <animate attributeName="stroke-dasharray" 
+               values="0,120;120,0" dur="2s" repeatCount="indefinite" begin="0.5s"/>
+    </line>
+    <line x1="200" y1="200" x2="200" y2="320" stroke="url(#neuralGradient)">
+      <animate attributeName="stroke-dasharray" 
+               values="0,120;120,0" dur="2s" repeatCount="indefinite" begin="1s"/>
+    </line>
+    <line x1="200" y1="200" x2="80" y2="200" stroke="url(#neuralGradient)">
+      <animate attributeName="stroke-dasharray" 
+               values="0,120;120,0" dur="2s" repeatCount="indefinite" begin="1.5s"/>
+    </line>
+  </g>
+
+  <!-- Quantum particles -->
+  <g id="particles">
+    <circle cx="200" cy="200" r="5" fill="url(#quantumGlow)">
+      <animateMotion dur="4s" repeatCount="indefinite" path="M0,0 Q40,-40 0,-80 Q-40,-40 0,0"/>
+    </circle>
+    <circle cx="200" cy="200" r="5" fill="url(#quantumGlow)">
+      <animateMotion dur="4s" repeatCount="indefinite" begin="1s" 
+                     path="M0,0 Q40,40 80,0 Q40,-40 0,0"/>
+    </circle>
+    <circle cx="200" cy="200" r="5" fill="url(#quantumGlow)">
+      <animateMotion dur="4s" repeatCount="indefinite" begin="2s"
+                     path="M0,0 Q-40,40 0,80 Q40,40 0,0"/>
+    </circle>
+    <circle cx="200" cy="200" r="5" fill="url(#quantumGlow)">
+      <animateMotion dur="4s" repeatCount="indefinite" begin="3s"
+                     path="M0,0 Q-40,-40 -80,0 Q-40,40 0,0"/>
+    </circle>
+  </g>
+</svg>
