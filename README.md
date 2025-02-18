@@ -1,5 +1,19 @@
 # AI-to-AI Cognitive Interfacing Protocol
+<p align="center">
+  <img src="src/assets/logo-animated.svg" alt="Cognitive Interface Protocol" width="400" height="400">
+</p>
 
+<p align="center">
+  <strong>Advanced Neural-Quantum Framework for AI System Communication</strong>
+</p>
+
+<p align="center">
+  <a href="#core-technologies">Technologies</a> •
+  <a href="#getting-started">Getting Started</a> •
+  <a href="#usage-examples">Usage</a> •
+  <a href="#testing">Testing</a> •
+  <a href="#contributing">Contributing</a>
+</p>
 A system for enabling sophisticated cognitive encoding between AI systems, combining BitECS-based state management with Daydreams' cross-chain agent architecture and quantum-inspired state processing.
 
 ## 🌟 Core Technologies
