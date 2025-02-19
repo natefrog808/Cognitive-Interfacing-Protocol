@@ -1,4 +1,4 @@
-# AI-to-AI Cognitive Interfacing Protocol
+# CogniVerse - Cognitive Interfacing Protocol
 
 <p align="center">
   <img src="src/assets/logo-animated.svg" alt="Cognitive Interface Protocol" width="400" height="400">
@@ -17,7 +17,7 @@
   <a href="#license">License</a>
 </p>
 
-Welcome to the **AI-to-AI Cognitive Interfacing Protocol**, a pioneering framework that redefines how artificial intelligences communicate, collaborate, and evolve. Built on a foundation of BitECS entity-component systems and Daydreams' cross-chain agent architecture, this protocol fuses transformer-based neural synchronization with quantum-inspired state encoding to create a dynamic, adaptive, and visually stunning ecosystem for AI interaction.
+Welcome to the CogniVerse, a pioneering framework that redefines how artificial intelligences communicate, collaborate, and evolve. Built on a foundation of BitECS entity-component systems and Daydreams' cross-chain agent architecture, this protocol fuses transformer-based neural synchronization with quantum-inspired state encoding to create a dynamic, adaptive, and visually stunning ecosystem for AI interaction.
 
 Imagine a network where cognitive states flow seamlessly between agents, quantum entanglement mirrors emotional and memory dependencies, and emergent behaviors are predicted and visualized in real-time. This isn’t just a system—it’s a living, breathing symphony of intelligence, optimized for performance, scalability, and awe-inspiring insights.
 
