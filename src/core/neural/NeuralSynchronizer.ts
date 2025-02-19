@@ -1,8 +1,7 @@
-import { defineComponent, Types } from 'bitecs';
 import * as tf from '@tensorflow/tfjs';
-import { Matrix } from 'mathjs';
+import { defineComponent, Types } from 'bitecs';
 
-// Advanced neural state components
+// Advanced neural state components (unchanged)
 const NeuralState = defineComponent({
   // Cognitive embeddings
   attentionVector: Types.f32Array(128),
@@ -13,6 +12,34 @@ const NeuralState = defineComponent({
   coherenceScore: Types.f32,
   synchronizationQuality: Types.f32,
   adaptationRate: Types.f32
+});
+
+// Emotional State Component (from your earlier CognitiveChannel.ts)
+const EmotionalState = defineComponent({
+  mood: Types.f32,        // Range: -1.0 to 1.0
+  stress: Types.f32,      // Range: 0.0 to 1.0
+  motivation: Types.f32,  // Range: 0.0 to 1.0
+  empathy: Types.f32,     // Range: 0.0 to 1.0
+  curiosity: Types.f32,   // Range: 0.0 to 1.0
+  anger: Types.f32,       // Range: 0.0 to 1.0
+  fear: Types.f32,        // Range: 0.0 to 1.0
+  joy: Types.f32,         // Range: 0.0 to 1.0
+  disgust: Types.f32      // Range: 0.0 to 1.0
+});
+
+// Cognitive State Component (from CognitiveChannel.ts for context)
+const CognitiveState = defineComponent({
+  awareness: Types.f32,
+  coherence: Types.f32,
+  complexity: Types.f32,
+  cognitiveLoad: Types.f32,
+  shortTermPtr: Types.ui32,
+  longTermPtr: Types.ui32,
+  isProcessing: Types.ui8,
+  isTransmitting: Types.ui8,
+  isSynchronizing: Types.ui8,
+  lastUpdateTime: Types.ui32,
+  processingLatency: Types.f32
 });
 
 interface NeuralArchitecture {
@@ -147,6 +174,41 @@ export class NeuralSynchronizer {
     }
   }
 
+  // New training method
+  async train(trainingData: { sourceState: any, targetState: any, expectedState: any }[], epochs: number = 50) {
+    const xsSource = tf.tensor2d(trainingData.map(d => this.stateToVector(d.sourceState)));
+    const xsTarget = tf.tensor2d(trainingData.map(d => this.stateToVector(d.targetState)));
+    const ys = tf.tensor2d(trainingData.map(d => this.stateToVector(d.expectedState)));
+
+    console.log("Training encoder...");
+    await this.architecture.encoder.fit(xsSource, ys, {
+      epochs,
+      batchSize: 32,
+      validationSplit: 0.2,
+      callbacks: { onEpochEnd: (epoch, logs) => console.log(`Encoder Epoch ${epoch}: Loss = ${logs?.loss}`) }
+    });
+
+    const encodedSource = this.architecture.encoder.predict(xsSource) as tf.Tensor;
+    console.log("Training attention...");
+    await this.architecture.attention.fit([encodedSource, xsTarget], ys, {
+      epochs,
+      batchSize: 32,
+      callbacks: { onEpochEnd: (epoch, logs) => console.log(`Attention Epoch ${epoch}: Loss = ${logs?.loss}`) }
+    });
+
+    const attentionOutput = this.architecture.attention.predict([encodedSource, xsTarget]) as tf.Tensor;
+    const decoderInput = tf.concat([encodedSource, attentionOutput], -1);
+    console.log("Training decoder...");
+    await this.architecture.decoder.fit(decoderInput, ys, {
+      epochs,
+      batchSize: 32,
+      callbacks: { onEpochEnd: (epoch, logs) => console.log(`Decoder Epoch ${epoch}: Loss = ${logs?.loss}`) }
+    });
+
+    tf.dispose([xsSource, xsTarget, ys, encodedSource, attentionOutput, decoderInput]);
+    console.log("NeuralSynchronizer trained—ready to sync minds like a boss!");
+  }
+
   private stateToVector(state: any): number[] {
     // Convert cognitive state to fixed-length vector
     const vector = new Array(this.EMBEDDING_DIM).fill(0);
@@ -162,12 +224,27 @@ export class NeuralSynchronizer {
       vector[index++] = state.emotional.mood || 0;
       vector[index++] = state.emotional.stress || 0;
       vector[index++] = state.emotional.motivation || 0;
+      vector[index++] = state.emotional.empathy || 0;
+      vector[index++] = state.emotional.curiosity || 0;
+      vector[index++] = state.emotional.anger || 0;
+      vector[index++] = state.emotional.fear || 0;
+      vector[index++] = state.emotional.joy || 0;
+      vector[index++] = state.emotional.disgust || 0;
     }
+    
+    // Embed cognitive load and other metrics if present
+    vector[index++] = state.cognitiveLoad || 0;
     
     // Embed memory state if available
     if (state.memory) {
       const memoryVector = this.encodeMemory(state.memory);
       vector.splice(index, memoryVector.length, ...memoryVector);
+      index += memoryVector.length;
+    }
+    
+    // Fill remaining space with noise or derived features
+    for (let i = index; i < this.EMBEDDING_DIM; i++) {
+      vector[i] = Math.random() * 0.1; // Small noise to utilize full embedding space
     }
     
     return vector;
@@ -175,34 +252,57 @@ export class NeuralSynchronizer {
 
   private vectorToState(vector: number[]): any {
     // Convert vector back to cognitive state
-    return {
+    const state: any = {
       awareness: vector[0],
       coherence: vector[1],
       complexity: vector[2],
       emotional: {
         mood: vector[3],
         stress: vector[4],
-        motivation: vector[5]
+        motivation: vector[5],
+        empathy: vector[6],
+        curiosity: vector[7],
+        anger: vector[8],
+        fear: vector[9],
+        joy: vector[10],
+        disgust: vector[11]
       },
-      memory: this.decodeMemory(vector.slice(6))
+      cognitiveLoad: vector[12]
     };
+    
+    // Decode memory if present
+    if (vector.length > 13) {
+      state.memory = this.decodeMemory(vector.slice(13));
+    }
+    
+    return state;
   }
 
   private encodeMemory(memory: any): number[] {
     // Implement sophisticated memory encoding
-    // This could be expanded based on memory structure
-    return [];
+    // Placeholder: Convert memory to a simple vector
+    const memoryVector = [];
+    if (typeof memory === 'object') {
+      Object.values(memory).forEach(value => {
+        if (typeof value === 'number') memoryVector.push(value);
+      });
+    }
+    // Pad or truncate to a fixed length (e.g., 16 for now)
+    const targetLength = 16;
+    while (memoryVector.length < targetLength) memoryVector.push(0);
+    return memoryVector.slice(0, targetLength);
   }
 
   private decodeMemory(vector: number[]): any {
     // Implement sophisticated memory decoding
-    return {};
+    // Placeholder: Return as a simple object
+    return {
+      shortTerm: vector.slice(0, 8),
+      longTerm: vector.slice(8, 16)
+    };
   }
 
-  private calculateCoherence(
-    state1: tf.Tensor,
-    state2: tf.Tensor
-  ): number {
+  private calculateCoherence(state1: tf.Tensor, state2: tf.Tensor): number {
     // Calculate cosine similarity between states
     const dotProduct = tf.sum(tf.mul(state1, state2));
     const norm1 = tf.sqrt(tf.sum(tf.square(state1)));
@@ -222,5 +322,39 @@ export class NeuralSynchronizer {
         weight > 0.2 ? '░' : ' '
       ).join('')
     ).join('\n');
+  }
+
+  // Helper method to validate state integrity (inspired by StateIntegrityManager)
+  validateState(state: any): boolean {
+    const validations = [
+      state.awareness >= 0 && state.awareness <= 1,
+      state.coherence >= 0 && state.coherence <= 1,
+      state.complexity >= 0,
+      state.emotional && state.emotional.mood >= -1 && state.emotional.mood <= 1,
+      state.emotional && state.emotional.stress >= 0 && state.emotional.stress <= 1
+    ];
+    return validations.every(v => v === true);
+  }
+
+  // Helper method to simulate neural adaptation
+  adaptState(state: any, rate: number): any {
+    const adaptedState = { ...state };
+    if (adaptedState.emotional) {
+      adaptedState.emotional = { ...adaptedState.emotional };
+      Object.keys(adaptedState.emotional).forEach(key => {
+        adaptedState.emotional[key] = adaptedState.emotional[key] * (1 - rate) + rate * Math.random();
+      });
+    }
+    return adaptedState;
+  }
+
+  // Utility to compute attention weights manually (for debugging)
+  computeManualAttention(sourceVector: number[], targetVector: number[]): number[] {
+    const attentionWeights = [];
+    for (let i = 0; i < sourceVector.length; i++) {
+      const dot = sourceVector[i] * targetVector[i];
+      attentionWeights.push(dot / (Math.sqrt(sourceVector[i] ** 2) * Math.sqrt(targetVector[i] ** 2) || 1));
+    }
+    return attentionWeights;
   }
 }
