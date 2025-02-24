@@ -3,7 +3,19 @@ import { SecurityManager } from './core/SecurityManager';
 import { AlertManager } from './core/AlertManager';
 import { SimulationEngine } from './core/SimulationEngine';
 import dotenv from 'dotenv';
+import express from 'express';
+import promClient from 'prom-client';
 
+const app = express();
+const register = new promClient.Registry();
+promClient.collectDefaultMetrics({ register });
+
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', register.contentType);
+  res.end(await register.metrics());
+});
+
+const httpServer = app.listen(9090, () => console.log('Metrics on port 9090'));
 dotenv.config();
 
 const PORT = process.env.WS_PORT ? parseInt(process.env.WS_PORT) : 8080;
