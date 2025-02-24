@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cogniverse
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: cogniverse
+  template:
+    metadata:
+      labels:
+        app: cogniverse
+    spec:
+      containers:
+      - name: cogniverse
+        image: yourusername/cogniverse:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: WS_PORT
+          value: "8080"
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: cogniverse-secrets
+              key: secret-key
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cogniverse-service
+spec:
+  selector:
+    app: cogniverse
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+  type: LoadBalancer
