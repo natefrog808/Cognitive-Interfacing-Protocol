@@ -1,0 +1,17 @@
+{
+  "family": "cogniverse-task",
+  "containerDefinitions": [
+    {
+      "name": "cogniverse",
+      "image": "yourusername/cogniverse:latest",
+      "essential": true,
+      "portMappings": [{ "containerPort": 8080, "hostPort": 8080 }],
+      "environment": [
+        { "name": "WS_PORT", "value": "8080" },
+        { "name": "SECRET_KEY", "value": "your-secret-here" }
+      ],
+      "memory": "512",
+      "cpu": "256"
+    }
+  ]
+}
