@@ -1,38 +1,43 @@
 import { defineComponent, Types } from 'bitecs';
-import { Matrix, matrix, eigen, multiply, add, subtract, inv, norm, zeros, ones } from 'mathjs';
+import { Matrix, matrix, eigen, multiply, add, subtract, inv, norm, zeros, ones, mean } from 'mathjs';
 import { NeuralSynchronizer } from '../neural/NeuralSynchronizer';
 import { QuantumStateEncoder } from '../quantum/QuantumStateEncoder';
 import { MLPredictor } from '../MLPredictor';
-import { CognitiveWebSocketServer } from '../CognitiveWebSocketServer';
+import { CognitiveWebSocketServer } from './CognitiveWebSocketServer';
+import { AdvancedAnomalyDetector } from '../anomaly/AdvancedAnomalyDetector';
 
 // Enhanced Topology Node Component
 const TopologyNode = defineComponent({
-  influence: Types.f32,          // 0-1
-  centrality: Types.f32,         // 0-1
-  stability: Types.f32,          // 0-1
-  connectivityDegree: Types.ui32,// Number of connections
-  clusterCoefficient: Types.f32, // 0-1
-  pathLength: Types.f32,         // Average path length to others
-  adaptationRate: Types.f32,     // 0-1
-  lastUpdateTime: Types.ui32,    // Timestamp (ms)
-  quantumEntanglement: Types.f32,// Quantum entanglement score (0-1)
-  neuralCoherence: Types.f32     // Neural sync coherence (0-1)
+  influence: Types.f32,
+  centrality: Types.f32,
+  stability: Types.f32,
+  connectivityDegree: Types.ui32,
+  clusterCoefficient: Types.f32,
+  pathLength: Types.f32,
+  adaptationRate: Types.f32,
+  lastUpdateTime: Types.ui32,
+  quantumEntanglement: Types.f32,
+  neuralCoherence: Types.f32,
+  spatialVector: Types.f32Array(3), // New: 3D position for visualization
+  entanglementFlow: Types.f32       // New: Flow of quantum influence
 });
 
 interface NetworkMetrics {
-  globalEfficiency: number;       // Efficiency of information flow
-  clusteringCoefficient: number;  // Average local clustering
-  averagePathLength: number;      // Mean shortest path length
-  smallWorldIndex: number;        // Small-world property measure
-  modularityScore: number;        // Community structure strength
+  globalEfficiency: number;
+  clusteringCoefficient: number;
+  averagePathLength: number;
+  smallWorldIndex: number;
+  modularityScore: number;
+  quantumComplexity: number;        // New: Quantum-driven complexity
 }
 
 interface AdaptationStrategy {
   type: 'merge' | 'split' | 'rewire' | 'strengthen' | 'weaken';
   nodes: number[];
-  confidence: number;             // 0-1
-  impact: number;                 // Expected network improvement (0-1)
-  quantumImpact: number;          // Quantum state influence (0-1)
+  confidence: number;
+  impact: number;
+  quantumImpact: number;
+  neuralImpact: number;             // New: Neural coherence influence
 }
 
 export class TopologyAdapter {
@@ -41,11 +46,12 @@ export class TopologyAdapter {
   private quantumEncoder: QuantumStateEncoder;
   private predictor: MLPredictor;
   private wsServer: CognitiveWebSocketServer;
+  private anomalyDetector: AdvancedAnomalyDetector;
   private nodeStates: Map<number, any> = new Map();
-  private readonly ADAPTATION_THRESHOLD = 0.7;
+  private ADAPTATION_THRESHOLD = 0.7; // Dynamic now
   private readonly MIN_CLUSTER_SIZE = 3;
   private readonly MAX_CLUSTER_SIZE = 12;
-  private readonly PREDICTION_HORIZON = 6; // Steps for ML prediction
+  private readonly PREDICTION_HORIZON = 6;
 
   constructor(
     initialSize: number,
@@ -58,28 +64,32 @@ export class TopologyAdapter {
     this.quantumEncoder = quantumEncoder;
     this.predictor = new MLPredictor(wsPort);
     this.wsServer = new CognitiveWebSocketServer(wsPort);
-    this.initializeComponents();
+    this.anomalyDetector = new AdvancedAnomalyDetector();
+    this.initializeComponents(initialSize);
   }
 
-  private async initializeComponents() {
+  private async initializeComponents(initialSize: number) {
     await Promise.all([
       this.neuralSync.initialize(),
       this.quantumEncoder.initialize(),
       this.predictor.initialize()
     ]);
+    for (let i = 0; i < initialSize; i++) {
+      TopologyNode.spatialVector[i] = [Math.random(), Math.random(), Math.random()]; // Random 3D init
+      TopologyNode.entanglementFlow[i] = 0;
+    }
+    console.log("TopologyAdapter initialized—networks coming alive!");
   }
 
   private initializeAdjacencyMatrix(size: number): Matrix {
     const matrix = zeros(size, size) as Matrix;
     const smallWorldFactor = 0.1;
 
-    // Ring connectivity
     for (let i = 0; i < size; i++) {
       matrix.set([i, (i + 1) % size], 1);
       matrix.set([(i + 1) % size, i], 1);
     }
 
-    // Random long-range connections
     const longRangeConnections = Math.floor(size * smallWorldFactor);
     for (let i = 0; i < longRangeConnections; i++) {
       const source = Math.floor(Math.random() * size);
@@ -123,8 +133,12 @@ export class TopologyAdapter {
   ): Promise<AdaptationStrategy[]> {
     const strategies: AdaptationStrategy[] = [];
     const clusters = this.identifyClusters();
+    const anomalyScores = nodes.map(n => this.anomalyDetector.detectAnomalies(n.toString(), [
+      performanceMetrics.get(n)?.influence || 0,
+      performanceMetrics.get(n)?.stability || 0
+    ]).score);
+    this.ADAPTATION_THRESHOLD = Math.max(0.5, 0.9 - mean(anomalyScores) * 0.2); // Anomaly-adjusted threshold
 
-    // Merge opportunities
     for (let i = 0; i < clusters.length; i++) {
       for (let j = i + 1; j < clusters.length; j++) {
         const cluster1 = clusters[i];
@@ -136,13 +150,13 @@ export class TopologyAdapter {
             nodes: [...cluster1, ...cluster2],
             confidence: mergeConfidence,
             impact: this.estimateStrategyImpact('merge', [...cluster1, ...cluster2], performanceMetrics),
-            quantumImpact: this.calculateQuantumImpact([...cluster1, ...cluster2])
+            quantumImpact: this.calculateQuantumImpact([...cluster1, ...cluster2]),
+            neuralImpact: await this.calculateNeuralImpact([...cluster1, ...cluster2])
           });
         }
       }
     }
 
-    // Split opportunities
     clusters.filter(c => c.length > this.MAX_CLUSTER_SIZE).forEach(cluster => {
       const splitConfidence = this.evaluateSplitStrategy(cluster, performanceMetrics);
       if (splitConfidence > this.ADAPTATION_THRESHOLD) {
@@ -151,12 +165,12 @@ export class TopologyAdapter {
           nodes: cluster,
           confidence: splitConfidence,
           impact: this.estimateStrategyImpact('split', cluster, performanceMetrics),
-          quantumImpact: this.calculateQuantumImpact(cluster)
+          quantumImpact: this.calculateQuantumImpact(cluster),
+          neuralImpact: await this.calculateNeuralImpact(cluster)
         });
       }
     });
 
-    // Rewiring opportunities
     for (const node of nodes) {
       const rewireConfidence = await this.evaluateRewireStrategy(node, performanceMetrics);
       if (rewireConfidence > this.ADAPTATION_THRESHOLD) {
@@ -165,7 +179,8 @@ export class TopologyAdapter {
           nodes: [node],
           confidence: rewireConfidence,
           impact: this.estimateStrategyImpact('rewire', [node], performanceMetrics),
-          quantumImpact: this.calculateQuantumImpact([node])
+          quantumImpact: this.calculateQuantumImpact([node]),
+          neuralImpact: await this.calculateNeuralImpact([node])
         });
       }
     }
@@ -205,9 +220,8 @@ export class TopologyAdapter {
     let clusters: number[][] = Array(k).fill(null).map(() => []);
     let converged = false;
     let iterations = 0;
-    const maxIterations = 100;
 
-    while (!converged && iterations < maxIterations) {
+    while (!converged && iterations < 100) {
       const newClusters: number[][] = Array(k).fill(null).map(() => []);
       points.forEach((point, index) => {
         const distances = centroids.map(c => this.euclideanDistance(point, c));
@@ -242,20 +256,26 @@ export class TopologyAdapter {
     const connectivity = this.calculateInterClusterConnectivity(cluster1, cluster2);
     const similarity = await this.calculateClusterSimilarity(cluster1, cluster2, performanceMetrics);
     const neuralCoherence = await this.calculateNeuralCoherence([...cluster1, ...cluster2]);
-    return (connectivity * 0.4 + similarity * 0.4 + neuralCoherence * 0.2);
+    const quantumImpact = this.calculateQuantumImpact([...cluster1, ...cluster2]);
+    return (connectivity * 0.3 + similarity * 0.3 + neuralCoherence * 0.2 + quantumImpact * 0.2);
   }
 
   private evaluateSplitStrategy(cluster: number[], performanceMetrics: Map<number, any>): number {
     const connectivity = this.calculateIntraClusterConnectivity(cluster);
     const variance = this.calculateClusterVariance(cluster, performanceMetrics);
-    return (1 - connectivity) * 0.6 + variance * 0.4;
+    const anomalyScore = mean(cluster.map(n => this.anomalyDetector.detectAnomalies(n.toString(), [
+      performanceMetrics.get(n)?.influence || 0,
+      performanceMetrics.get(n)?.stability || 0
+    ]).score));
+    return (1 - connectivity) * 0.5 + variance * 0.3 + anomalyScore * 0.2;
   }
 
   private async evaluateRewireStrategy(node: number, performanceMetrics: Map<number, any>): Promise<number> {
     const isolation = this.calculateNodeIsolation(node);
     const potential = await this.calculateConnectionPotential(node, performanceMetrics);
     const quantumWeight = this.calculateQuantumImpact([node]);
-    return (isolation * 0.4 + potential * 0.4 + quantumWeight * 0.2);
+    const forecast = await this.predictor.predict(node.toString(), 1);
+    return (isolation * 0.3 + potential * 0.3 + quantumWeight * 0.2 + forecast.confidence * 0.2);
   }
 
   private calculateInterClusterConnectivity(cluster1: number[], cluster2: number[]): number {
@@ -276,7 +296,7 @@ export class TopologyAdapter {
       for (let j = i + 1; j < cluster.length; j++) {
         if (this.adjacencyMatrix.get([cluster[i], cluster[j]]) === 1) connections++;
       }
-    }
+    });
     return maxConnections > 0 ? connections / maxConnections : 0;
   }
 
@@ -286,11 +306,10 @@ export class TopologyAdapter {
   }
 
   private async calculateConnectionPotential(node: number, performanceMetrics: Map<number, any>): Promise<number> {
-    const nodeState = performanceMetrics.get(node);
-    if (!nodeState) return 0.5;
+    const nodeState = performanceMetrics.get(node) || {};
     const register = this.quantumEncoder.encodeState(nodeState, node.toString());
     const entanglement = this.quantumEncoder.calculateEntanglementMetrics(register).score;
-    const syncResult = await this.neuralSync.synchronizeStates(nodeState, nodeState); // Self-sync for coherence
+    const syncResult = await this.neuralSync.synchronizeStates(nodeState, nodeState);
     return (entanglement + syncResult.coherenceScore) / 2;
   }
 
@@ -322,6 +341,8 @@ export class TopologyAdapter {
         appliedStrategies.push(strategy);
         for (const node of strategy.nodes) {
           TopologyNode.lastUpdateTime[node] = Date.now();
+          TopologyNode.entanglementFlow[node] = strategy.quantumImpact * strategy.impact;
+          this.adjustSpatialVector(node, strategy.type);
         }
       }
     }
@@ -400,6 +421,25 @@ export class TopologyAdapter {
     return true;
   }
 
+  private adjustSpatialVector(node: number, strategyType: string) {
+    const vector = TopologyNode.spatialVector[node];
+    switch (strategyType) {
+      case 'merge':
+      case 'strengthen':
+        vector[2] += 0.1; // Move upward
+        break;
+      case 'split':
+      case 'weaken':
+        vector[2] -= 0.1; // Move downward
+        break;
+      case 'rewire':
+        vector[0] += (Math.random() - 0.5) * 0.2; // Random lateral shift
+        vector[1] += (Math.random() - 0.5) * 0.2;
+        break;
+    }
+    TopologyNode.spatialVector[node] = vector.map(v => Math.max(-1, Math.min(1, v))) as any;
+  }
+
   private async calculateNetworkMetrics(): Promise<NetworkMetrics> {
     const size = this.adjacencyMatrix.size()[0];
     const efficiency = this.calculateGlobalEfficiency();
@@ -407,13 +447,15 @@ export class TopologyAdapter {
     const pathLength = this.calculateAveragePathLength();
     const smallWorld = this.calculateSmallWorldIndex();
     const modularity = this.calculateModularity();
+    const quantumComplexity = mean(Array.from({ length: size }, (_, i) => TopologyNode.quantumEntanglement[i] * TopologyNode.connectivityDegree[i]));
 
     return {
       globalEfficiency: efficiency,
       clusteringCoefficient: clustering,
       averagePathLength: pathLength,
       smallWorldIndex: smallWorld,
-      modularityScore: modularity
+      modularityScore: modularity,
+      quantumComplexity
     };
   }
 
@@ -469,7 +511,7 @@ export class TopologyAdapter {
     const clustering = this.calculateClusteringCoefficient();
     const pathLength = this.calculateAveragePathLength();
     const randomClustering = this.adjacencyMatrix.toArray().flat().reduce((sum: number, val: number) => sum + val, 0) / (this.adjacencyMatrix.size()[0] * (this.adjacencyMatrix.size()[0] - 1));
-    const randomPathLength = Math.log(this.adjacencyMatrix.size()[0]) / Math.log(2); // Approx for random graph
+    const randomPathLength = Math.log(this.adjacencyMatrix.size()[0]) / Math.log(2);
     return (clustering / randomClustering) / (pathLength / randomPathLength);
   }
 
@@ -485,7 +527,7 @@ export class TopologyAdapter {
       let expectedEdges = 0;
       for (const i of cluster) {
         for (const j of cluster) {
-          if (this.adjacencyMatrix.get([i, j]) === 1) withinEdges += 0.5; // Count each edge once
+          if (this.adjacencyMatrix.get([i, j]) === 1) withinEdges += 0.5;
         }
         expectedEdges += degrees[i] * degrees[i] / (2 * totalEdges);
       }
@@ -516,7 +558,10 @@ export class TopologyAdapter {
   }
 
   private rankStrategies(strategies: AdaptationStrategy[]): AdaptationStrategy[] {
-    return strategies.sort((a, b) => (b.confidence * b.impact * b.quantumImpact) - (a.confidence * a.impact * a.quantumImpact));
+    return strategies.sort((a, b) => 
+      (b.confidence * b.impact * b.quantumImpact * b.neuralImpact) - 
+      (a.confidence * a.impact * a.quantumImpact * a.neuralImpact)
+    );
   }
 
   private estimateStrategyImpact(type: AdaptationStrategy['type'], nodes: number[], performanceMetrics: Map<number, any>): number {
@@ -540,6 +585,12 @@ export class TopologyAdapter {
     return mean(nodes.map(n => TopologyNode.quantumEntanglement[n] || 0));
   }
 
+  private async calculateNeuralImpact(nodes: number[]): Promise<number> {
+    const states = nodes.map(n => this.nodeStates.get(n) || {});
+    const syncResults = await Promise.all(states.map(s => this.neuralSync.synchronizeStates(s, s)));
+    return mean(syncResults.map(r => r.coherenceScore));
+  }
+
   private async calculateClusterSimilarity(cluster1: number[], cluster2: number[], performanceMetrics: Map<number, any>): Promise<number> {
     const states1 = cluster1.map(n => performanceMetrics.get(n) || {});
     const states2 = cluster2.map(n => performanceMetrics.get(n) || {});
@@ -554,9 +605,10 @@ export class TopologyAdapter {
     return std(influences) || 0;
   }
 
-  private updateNodeStates(nodes: number[], performanceMetrics: Map<number, any>) {
-    nodes.forEach(node => {
+  private async updateNodeStates(nodes: number[], performanceMetrics: Map<number, any>) {
+    for (const node of nodes) {
       const metrics = performanceMetrics.get(node) || {};
+      this.nodeStates.set(node, metrics);
       TopologyNode.influence[node] = metrics.influence || TopologyNode.influence[node];
       TopologyNode.centrality[node] = this.calculateCentrality(node);
       TopologyNode.stability[node] = metrics.stability || TopologyNode.stability[node];
@@ -564,14 +616,12 @@ export class TopologyAdapter {
       TopologyNode.clusterCoefficient[node] = this.calculateClusteringCoefficientForNode(node);
       TopologyNode.pathLength[node] = this.calculateAveragePathLengthForNode(node);
       TopologyNode.adaptationRate[node] = metrics.adaptationRate || TopologyNode.adaptationRate[node];
-      TopologyNode.quantumEntanglement[node] = this.quantumEncoder.calculateEntanglementMetrics(
-        this.quantumEncoder.encodeState(metrics, node.toString())
-      ).score;
-      TopologyNode.neuralCoherence[node] = (async () => {
-        const sync = await this.neuralSync.synchronizeStates(metrics, metrics);
-        return sync.coherenceScore;
-      })();
-    });
+      
+      const register = this.quantumEncoder.encodeState(metrics, node.toString());
+      TopologyNode.quantumEntanglement[node] = this.quantumEncoder.calculateEntanglementMetrics(register).score;
+      const syncResult = await this.neuralSync.synchronizeStates(metrics, metrics);
+      TopologyNode.neuralCoherence[node] = syncResult.coherenceScore;
+    }
   }
 
   private calculateCentrality(node: number): number {
@@ -586,9 +636,9 @@ export class TopologyAdapter {
       .filter((idx: number) => idx !== -1);
     let triangles = 0;
     const possibleTriangles = neighbors.length * (neighbors.length - 1) / 2;
-    for (let i = 0; i < neighbors.length; i++) {
-      for (let j = i + 1; j < neighbors.length; j++) {
-        if (this.adjacencyMatrix.get([neighbors[i], neighbors[j]]) === 1) triangles++;
+    for (let j = 0; j < neighbors.length; j++) {
+      for (let k = j + 1; k < neighbors.length; k++) {
+        if (this.adjacencyMatrix.get([neighbors[j], neighbors[k]]) === 1) triangles++;
       }
     }
     return possibleTriangles > 0 ? triangles / possibleTriangles : 0;
@@ -616,12 +666,12 @@ export class TopologyAdapter {
     for (let i = 0; i < size; i++) {
       const connections = this.adjacencyMatrix.get([i]).map((val: number, idx: number) => val === 1 ? idx : -1)
         .filter((idx: number) => idx !== -1);
-      lines.push(`Node ${i} [C:${TopologyNode.centrality[i].toFixed(2)}, S:${TopologyNode.stability[i].toFixed(2)}]: ${connections.join(', ')}`);
+      const pos = TopologyNode.spatialVector[i];
+      lines.push(`Node ${i} [C:${TopologyNode.centrality[i].toFixed(2)}, S:${TopologyNode.stability[i].toFixed(2)}, Q:${TopologyNode.quantumEntanglement[i].toFixed(2)}] @ (${pos[0].toFixed(2)}, ${pos[1].toFixed(2)}, ${pos[2].toFixed(2)}): ${connections.join(', ')}`);
     }
     return lines.join('\n');
   }
 
-  // New: Forecast topology evolution
   async forecastEvolution(nodes: number[], steps: number = this.PREDICTION_HORIZON): Promise<{ predictions: NetworkMetrics[]; confidence: number }> {
     const currentMetrics = await this.calculateNetworkMetrics();
     const predMetrics = nodes.map(n => ({
@@ -632,15 +682,16 @@ export class TopologyAdapter {
       timestamp: Date.now()
     }));
     predMetrics.forEach(m => this.predictor.addDataPoint(nodes[0].toString(), m));
-    const { predictions, confidence } = await this.predictor.predict(nodes[0].toString(), steps);
+    const { predictions, confidence, emergentState } = await this.predictor.predict(nodes[0].toString(), steps);
     const forecast = predictions.map(p => ({
       globalEfficiency: currentMetrics.globalEfficiency * (1 - p[0] * 0.1),
       clusteringCoefficient: currentMetrics.clusteringCoefficient * (1 + p[1] * 0.1),
       averagePathLength: currentMetrics.averagePathLength * (1 + p[2] * 0.1),
       smallWorldIndex: currentMetrics.smallWorldIndex,
-      modularityScore: currentMetrics.modularityScore * (1 - p[3] * 0.1)
+      modularityScore: currentMetrics.modularityScore * (1 - p[3] * 0.1),
+      quantumComplexity: currentMetrics.quantumComplexity * (1 + p[4] * 0.1)
     }));
-    this.wsServer.broadcastStateUpdate("topology_forecast", { predictions: forecast, confidence });
+    this.wsServer.broadcastStateUpdate("topology_forecast", { predictions: forecast, confidence, emergentState });
     return { predictions: forecast, confidence };
   }
 }
