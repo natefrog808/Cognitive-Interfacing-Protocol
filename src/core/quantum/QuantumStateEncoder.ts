@@ -1,20 +1,23 @@
 import { defineComponent, Types } from 'bitecs';
-import { Complex, add, multiply, exp, pi, sqrt, matrix, inv, transpose, conjugate, norm, zeros, identity } from 'mathjs';
-import { NeuralSynchronizer } from './neural/NeuralSynchronizer'; // Assuming this exists
+import { Complex, add, multiply, exp, pi, sqrt, matrix, inv, transpose, conjugate, norm, zeros, identity, mean } from 'mathjs';
+import { NeuralSynchronizer } from './neural/NeuralSynchronizer';
 import { CognitiveChannel } from './CognitiveChannel';
 import { CognitiveWebSocketServer } from './CognitiveWebSocketServer';
+import { AdvancedAnomalyDetector } from './anomaly/AdvancedAnomalyDetector';
 
 // Enhanced Quantum State Component
 const QuantumState = defineComponent({
-  amplitudeReal: Types.f32Array(64), // Real part of state vector
-  amplitudeImag: Types.f32Array(64), // Imaginary part of state vector
-  entanglementScore: Types.f32,      // 0-1
-  superpositionDegree: Types.f32,    // 0-1
-  coherenceMetric: Types.f32,        // 0-1 (decoherence level)
-  isEntangled: Types.ui8,            // 0-1
-  isCollapsed: Types.ui8,            // 0-1
-  decoherenceRate: Types.f32,        // Rate of coherence loss per ms
-  lastMeasurementTime: Types.ui32    // Timestamp of last measurement
+  amplitudeReal: Types.f32Array(64),
+  amplitudeImag: Types.f32Array(64),
+  entanglementScore: Types.f32,
+  superpositionDegree: Types.f32,
+  coherenceMetric: Types.f32,
+  isEntangled: Types.ui8,
+  isCollapsed: Types.ui8,
+  decoherenceRate: Types.f32,
+  lastMeasurementTime: Types.ui32,
+  entanglementGraph: Types.f32Array(64), // New: Entanglement strength per qubit
+  coherenceWave: Types.f32Array(64)     // New: Coherence oscillation per qubit
 });
 
 interface Qubit {
@@ -23,9 +26,9 @@ interface Qubit {
 }
 
 interface QuantumRegister {
-  qubits: Qubit[];                   // Array of qubits
-  entanglementMap: Map<number, number[]>; // Entanglement connections
-  densityMatrix: any;                // Complex matrix for mixed states
+  qubits: Qubit[];
+  entanglementMap: Map<number, number[]>;
+  densityMatrix: any;
 }
 
 export class QuantumStateEncoder {
@@ -34,29 +37,33 @@ export class QuantumStateEncoder {
   private neuralSync: NeuralSynchronizer;
   private channel: CognitiveChannel;
   private wsServer: CognitiveWebSocketServer;
-  private noiseLevel: number = 0.01; // Base decoherence noise
+  private anomalyDetector: AdvancedAnomalyDetector;
+  private noiseLevel: number = 0.01;
+  private coherenceThreshold: number = 0.9; // For adaptive error correction
 
   // Quantum Gates
   private readonly PAULI_X = matrix([[0, 1], [1, 0]]);
   private readonly PAULI_Y = matrix([[0, Complex(-1, 0)], [Complex(1, 0), 0]]);
   private readonly PAULI_Z = matrix([[1, 0], [0, -1]]);
   private readonly HADAMARD = matrix([[1 / sqrt(2), 1 / sqrt(2)], [1 / sqrt(2), -1 / sqrt(2)]]);
-  private readonly CNOT = matrix([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]]); // 2-qubit gate
-  private readonly SWAP = matrix([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]]); // Swap gate
+  private readonly CNOT = matrix([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]]);
+  private readonly SWAP = matrix([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]]);
 
   constructor(wsPort: number = 8080) {
     this.neuralSync = new NeuralSynchronizer();
     this.channel = new CognitiveChannel();
     this.wsServer = new CognitiveWebSocketServer(wsPort);
+    this.anomalyDetector = new AdvancedAnomalyDetector();
   }
 
   async initialize() {
-    await this.neuralSync.initialize();
+    await this.neuralSync.initialize(0.5);
+    console.log("QuantumStateEncoder initialized—spinning up the quantum realm!");
   }
 
   createQuantumRegister(entityId: string): QuantumRegister {
     const register: QuantumRegister = {
-      qubits: Array(this.NUM_QUBITS).fill(null).map(() => ({ real: 1 / sqrt(2), imag: 0 })), // Start in |+> state
+      qubits: Array(this.NUM_QUBITS).fill(null).map(() => ({ real: 1 / sqrt(2), imag: 0 })),
       entanglementMap: new Map(),
       densityMatrix: this.initializeDensityMatrix(this.NUM_QUBITS)
     };
@@ -65,36 +72,40 @@ export class QuantumStateEncoder {
     return register;
   }
 
-  encodeState(state: any, entityId: string): QuantumRegister {
+  async encodeState(state: any, entityId: string): QuantumRegister {
     const register = this.registers.get(entityId) || this.createQuantumRegister(entityId);
     const id = parseInt(entityId);
 
-    // Normalize state values
+    // Normalize and enrich state with neural feedback
     const normalizedState = this.normalizeState(state);
+    const syncResult = await this.neuralSync.synchronizeStates(normalizedState, normalizedState, 0.5);
+    const attentionMap = syncResult.attentionMap[0];
 
     // Encode with quantum operations
-    this.encodeCognitiveState(normalizedState, register);
-    this.encodeEmotionalState(normalizedState.emotional, register);
+    this.encodeCognitiveState(normalizedState, register, attentionMap);
+    this.encodeEmotionalState(normalizedState.emotional, register, attentionMap);
     this.encodeMemoryState(normalizedState.memory || {}, register);
 
     // Apply advanced transformations
     this.applyQuantumErrorCorrection(register);
-    this.applyEntanglementOptimization(register);
+    this.applyEntanglementOptimization(register, state);
     this.simulateDecoherence(entityId, register);
 
     // Update BitECS and broadcast
     this.updateBitECS(entityId, register);
+    const measured = this.measureState(register);
     this.wsServer.broadcastStateUpdate(entityId, {
       quantumState: this.getQuantumStateSnapshot(id),
-      measured: this.measureState(register).measuredState
+      measured: measured.measuredState,
+      tomography: measured.tomography,
+      entanglementGraph: Array.from(QuantumState.entanglementGraph[id])
     });
 
     return register;
   }
 
-  // State Normalization
   private normalizeState(state: any): any {
-    const normVal = (val: number, min: number, max: number) => (val - min) / (max - min);
+    const normVal = (val: number, min: number, max: number) => Math.min(1, Math.max(0, (val - min) / (max - min)));
     return {
       awareness: normVal(state.awareness || 0, 0, 1),
       coherence: normVal(state.coherence || 0, 0, 1),
@@ -115,22 +126,23 @@ export class QuantumStateEncoder {
     };
   }
 
-  private encodeCognitiveState(state: any, register: QuantumRegister) {
-    const cognitiveQubits = register.qubits.slice(0, 16); // More qubits for richer encoding
-    this.applyPhaseRotation(cognitiveQubits[0], state.awareness * pi);
-    this.createSuperposition(cognitiveQubits[1], state.coherence);
-    this.createControlledEntanglement(cognitiveQubits.slice(2, 6), state.complexity);
+  private encodeCognitiveState(state: any, register: QuantumRegister, attentionMap: number[]) {
+    const cognitiveQubits = register.qubits.slice(0, 16);
+    this.applyPhaseRotation(cognitiveQubits[0], state.awareness * pi * attentionMap[0]);
+    this.createSuperposition(cognitiveQubits[1], state.coherence * attentionMap[1]);
+    this.createControlledEntanglement(cognitiveQubits.slice(2, 6), state.complexity * attentionMap[2]);
     this.applyAmplitudeDamping(cognitiveQubits[6], state.cognitiveLoad);
-    this.applySwapGate(cognitiveQubits[7], cognitiveQubits[8]); // Swap for complexity mixing
+    this.applySwapGate(cognitiveQubits[7], cognitiveQubits[8]);
+    this.applyNeuralFeedback(cognitiveQubits.slice(9, 16), attentionMap.slice(3));
   }
 
-  private encodeEmotionalState(emotional: any, register: QuantumRegister) {
+  private encodeEmotionalState(emotional: any, register: QuantumRegister, attentionMap: number[]) {
     if (!emotional) return;
-    const emotionalQubits = register.qubits.slice(16, 32); // Expanded emotional encoding
-    this.applyPhaseRotation(emotionalQubits[0], emotional.mood * pi);
+    const emotionalQubits = register.qubits.slice(16, 32);
+    this.applyPhaseRotation(emotionalQubits[0], emotional.mood * pi * attentionMap[3]);
     this.applyAmplitudeDamping(emotionalQubits[1], emotional.stress);
     this.applyControlledRotation(emotionalQubits[2], emotionalQubits[3], emotional.motivation * pi);
-    this.createControlledEntanglement(emotionalQubits.slice(4, 8), emotional.empathy);
+    this.createControlledEntanglement(emotionalQubits.slice(4, 8), emotional.empathy * attentionMap[4]);
     this.applyCNOT(emotionalQubits[8], emotionalQubits[9], emotional.curiosity > 0.5);
     this.applyPhaseRotation(emotionalQubits[10], emotional.anger * pi);
     this.applyPhaseRotation(emotionalQubits[11], emotional.fear * pi);
@@ -139,7 +151,7 @@ export class QuantumStateEncoder {
   }
 
   private encodeMemoryState(memory: any, register: QuantumRegister) {
-    const memoryQubits = register.qubits.slice(32, 64); // Full remaining qubits
+    const memoryQubits = register.qubits.slice(32, 64);
     const memoryVector = this.vectorizeMemory(memory);
     this.applyQuantumFourierTransform(memoryQubits);
     memoryVector.forEach((val, i) => {
@@ -150,26 +162,24 @@ export class QuantumStateEncoder {
         }
       }
     });
-    this.applyQuantumErrorCorrection(register, 32, 64); // Focused on memory qubits
   }
 
-  // Quantum Operations
-  private applyHadamardTransform(register: QuantumRegister) {
-    register.qubits.forEach((qubit, idx) => {
-      const state = matrix([qubit.real, qubit.imag]);
-      const transformed = multiply(this.HADAMARD, state);
-      qubit.real = transformed.get([0]).re;
-      qubit.imag = transformed.get([0]).im;
-      this.normalizeQubit(qubit);
+  private applyNeuralFeedback(qubits: Qubit[], attentionWeights: number[]) {
+    attentionWeights.forEach((weight, i) => {
+      if (i < qubits.length) {
+        this.applyPhaseRotation(qubits[i], weight * pi);
+      }
     });
+  }
+
+  private applyHadamardTransform(register: QuantumRegister) {
+    register.qubits.forEach(qubit => this.applyHadamardToQubit(qubit));
   }
 
   private applyPhaseRotation(qubit: Qubit, angle: number) {
     const phase = exp(multiply(Complex(0, 1), angle));
-    const newReal = multiply(phase, qubit.real).re + this.noiseLevel * (Math.random() - 0.5);
-    const newImag = multiply(phase, qubit.imag).im + this.noiseLevel * (Math.random() - 0.5);
-    qubit.real = newReal;
-    qubit.imag = newImag;
+    qubit.real = multiply(phase, qubit.real).re + this.noiseLevel * (Math.random() - 0.5);
+    qubit.imag = multiply(phase, qubit.imag).im + this.noiseLevel * (Math.random() - 0.5);
     this.normalizeQubit(qubit);
   }
 
@@ -193,8 +203,6 @@ export class QuantumStateEncoder {
     const gamma = dampingFactor;
     qubit.real *= sqrt(1 - gamma);
     qubit.imag *= sqrt(1 - gamma);
-    qubit.real += this.noiseLevel * (Math.random() - 0.5);
-    qubit.imag += this.noiseLevel * (Math.random() - 0.5);
     this.normalizeQubit(qubit);
   }
 
@@ -213,11 +221,11 @@ export class QuantumStateEncoder {
         this.applyControlledPhase(qubits[j], qubits[i], phase);
       }
     }
-    this.applyInverseSwap(qubits); // Reverse order
+    this.applyInverseSwap(qubits);
   }
 
   private applyInverseQuantumFourierTransform(qubits: Qubit[]) {
-    this.applySwap(qubits); // Restore order
+    this.applySwap(qubits);
     const n = qubits.length;
     for (let i = n - 1; i >= 0; i--) {
       for (let j = i - 1; j >= 0; j--) {
@@ -254,7 +262,7 @@ export class QuantumStateEncoder {
     this.normalizeQubit(target);
   }
 
-  private applySwap(qubit1: Qubit, qubit2: Qubit) {
+  private applySwapGate(qubit1: Qubit, qubit2: Qubit) {
     const state = matrix([[qubit1.real], [qubit1.imag], [qubit2.real], [qubit2.imag]]);
     const transformed = multiply(this.SWAP, state);
     qubit1.real = transformed.get([0]).re;
@@ -263,57 +271,59 @@ export class QuantumStateEncoder {
     qubit2.imag = transformed.get([3]).im;
   }
 
-  private applyInverseSwap(qubits: Qubit[]) {
+  private applySwap(qubits: Qubit[]) {
     for (let i = 0; i < qubits.length / 2; i++) {
-      this.applySwap(qubits[i], qubits[qubits.length - 1 - i]);
+      this.applySwapGate(qubits[i], qubits[qubits.length - 1 - i]);
     }
+  }
+
+  private applyInverseSwap(qubits: Qubit[]) {
+    this.applySwap(qubits);
   }
 
   private entangleQubits(qubit1: Qubit, qubit2: Qubit, entanglementMap: Map<number, number[]>) {
     this.applyHadamardToQubit(qubit1);
     this.applyCNOT(qubit1, qubit2, true);
-    const idx1 = this.registers.values().next().value.qubits.indexOf(qubit1);
-    const idx2 = this.registers.values().next().value.qubits.indexOf(qubit2);
+    const idx1 = Array.from(this.registers.values())[0].qubits.indexOf(qubit1);
+    const idx2 = Array.from(this.registers.values())[0].qubits.indexOf(qubit2);
     entanglementMap.set(idx1, [...(entanglementMap.get(idx1) || []), idx2]);
     entanglementMap.set(idx2, [...(entanglementMap.get(idx2) || []), idx1]);
   }
 
-  private createBellState(qubit1: Qubit, qubit2: Qubit): Complex[] {
-    return [Complex(1 / sqrt(2), 0), Complex(0, 0), Complex(0, 0), Complex(1 / sqrt(2), 0)]; // |00> + |11>
-  }
-
-  // Quantum Error Correction (Simplified Surface Code Simulation)
   private applyQuantumErrorCorrection(register: QuantumRegister, startIdx: number = 0, endIdx: number = this.NUM_QUBITS) {
-    for (let i = startIdx; i < endIdx - 1; i += 2) {
-      const qubit = register.qubits[i];
-      const ancilla = register.qubits[i + 1];
-      this.applyCNOT(qubit, ancilla, true); // Stabilizer check
-      if (Math.random() < this.noiseLevel) { // Simulate bit-flip error
-        qubit.real = qubit.real === 0 ? 1 : 0;
+    for (let i = startIdx; i < endIdx - 2; i += 3) { // Simplified 3-qubit code
+      const dataQubit = register.qubits[i];
+      const ancilla1 = register.qubits[i + 1];
+      const ancilla2 = register.qubits[i + 2];
+      this.applyCNOT(dataQubit, ancilla1, true);
+      this.applyCNOT(dataQubit, ancilla2, true);
+      const anomalyScore = this.anomalyDetector.detectAnomalies(String(i), [dataQubit.real, dataQubit.imag]).score;
+      if (anomalyScore > 0.5 || Math.random() < this.noiseLevel * (1 + anomalyScore)) {
+        dataQubit.real = ancilla1.real === ancilla2.real ? ancilla1.real : dataQubit.real;
+        dataQubit.imag = ancilla1.imag === ancilla2.imag ? ancilla1.imag : dataQubit.imag;
       }
-      this.applyCNOT(qubit, ancilla, true); // Correct if needed
     }
   }
 
-  // Entanglement Optimization
-  private applyEntanglementOptimization(register: QuantumRegister) {
+  private applyEntanglementOptimization(register: QuantumRegister, state: any) {
     const entangleStrength = this.calculateEntanglementMetrics(register).score;
-    if (entangleStrength < 0.5) {
+    const emotionalResonance = state.emotional ? mean(Object.values(state.emotional)) : 0;
+    if (entangleStrength < 0.7 || emotionalResonance > 0.8) {
       for (let i = 0; i < this.NUM_QUBITS - 1; i += 2) {
         this.entangleQubits(register.qubits[i], register.qubits[i + 1], register.entanglementMap);
       }
     }
   }
 
-  // Decoherence Simulation
   private simulateDecoherence(entityId: string, register: QuantumRegister) {
     const id = parseInt(entityId);
-    const timeSinceLast = (Date.now() - (QuantumState.lastMeasurementTime[id] || 0)) / 1000; // Seconds
+    const timeSinceLast = (Date.now() - (QuantumState.lastMeasurementTime[id] || 0)) / 1000;
     const decoherence = QuantumState.decoherenceRate[id] * timeSinceLast || this.noiseLevel;
-    register.qubits.forEach(qubit => {
+    register.qubits.forEach((qubit, i) => {
       qubit.real *= (1 - decoherence);
       qubit.imag *= (1 - decoherence);
       this.normalizeQubit(qubit);
+      QuantumState.coherenceWave[id][i] = 1 - decoherence + Math.sin(Date.now() / 1000 + i) * 0.1; // Oscillatory wave
     });
   }
 
@@ -322,7 +332,7 @@ export class QuantumStateEncoder {
     entanglementMetrics: { score: number; patterns: Map<number, number[]> };
     tomography: any;
   } {
-    const id = this.registers.entries().next().value[0]; // First entity ID for demo
+    const id = Array.from(this.registers.keys())[0]; // First entity for demo
     const measuredState = {
       cognitive: this.measureCognitiveQubits(register.qubits.slice(0, 16)),
       emotional: this.measureEmotionalQubits(register.qubits.slice(16, 32)),
@@ -338,7 +348,8 @@ export class QuantumStateEncoder {
     this.wsServer.broadcastStateUpdate(id, {
       quantumState: this.getQuantumStateSnapshot(parseInt(id)),
       measured: measuredState,
-      tomography
+      tomography,
+      entanglementGraph: Array.from(QuantumState.entanglementGraph[parseInt(id)])
     });
 
     return { measuredState, entanglementMetrics, tomography };
@@ -392,7 +403,6 @@ export class QuantumStateEncoder {
     return { score: Math.min(1, score), patterns: register.entanglementMap };
   }
 
-  // State Tomography (Simplified)
   private performStateTomography(register: QuantumRegister): any {
     const stateVector = register.qubits.map(q => Complex(q.real, q.imag));
     const density = multiply(matrix(stateVector), transpose(conjugate(matrix(stateVector))));
@@ -402,7 +412,6 @@ export class QuantumStateEncoder {
     };
   }
 
-  // Helper Functions
   private normalizeQubit(qubit: Qubit) {
     const mag = norm([qubit.real, qubit.imag]);
     if (mag > 0) {
@@ -424,7 +433,7 @@ export class QuantumStateEncoder {
 
   private devectorizeMemory(vector: number[]): any {
     return {
-      values: vector.slice(0, 16), // Arbitrary split for demo
+      values: vector.slice(0, 16),
       patterns: vector.slice(16)
     };
   }
@@ -439,13 +448,15 @@ export class QuantumStateEncoder {
     register.qubits.forEach((q, i) => {
       QuantumState.amplitudeReal[id][i] = q.real;
       QuantumState.amplitudeImag[id][i] = q.imag;
+      QuantumState.entanglementGraph[id][i] = register.entanglementMap.get(i)?.length / this.NUM_QUBITS || 0;
+      QuantumState.coherenceWave[id][i] = QuantumState.coherenceWave[id][i] || 1;
     });
     const metrics = this.calculateEntanglementMetrics(register);
     QuantumState.entanglementScore[id] = metrics.score;
     QuantumState.superpositionDegree[id] = this.calculateSuperpositionDegree(register);
     QuantumState.coherenceMetric[id] = this.calculateCoherence(register);
     QuantumState.isEntangled[id] = metrics.score > 0 ? 1 : 0;
-    QuantumState.decoherenceRate[id] = this.noiseLevel * (1 + QuantumState.entanglementScore[id]);
+    QuantumState.decoherenceRate[id] = this.noiseLevel * (1 + metrics.score);
   }
 
   private calculateSuperpositionDegree(register: QuantumRegister): number {
@@ -454,19 +465,19 @@ export class QuantumStateEncoder {
 
   private calculateCoherence(register: QuantumRegister): number {
     const offDiagonal = register.densityMatrix.map((val, [i, j]) => i !== j ? norm(val) : 0);
-    return 1 - mean(offDiagonal);
+    return Math.min(1, 1 - mean(offDiagonal));
   }
 
-  // New: Visualize entanglement
   visualizeEntanglement(entityId: string): string {
     const register = this.registers.get(entityId);
     if (!register) return "No register found";
-    const lines = Array(this.NUM_QUBITS).fill(' ');
-    register.entanglementMap.forEach((targets, source) => {
-      targets.forEach(target => {
-        lines[source] = lines[source] === ' ' ? `${target}` : `${lines[source]},${target}`;
-      });
+    const id = parseInt(entityId);
+    const lines = register.qubits.map((_, i) => {
+      const connections = register.entanglementMap.get(i) || [];
+      const strength = QuantumState.entanglementGraph[id][i];
+      const wave = QuantumState.coherenceWave[id][i];
+      return `Q${i}: ${connections.join(',') || 'None'} (Strength: ${strength.toFixed(2)}, Wave: ${wave.toFixed(2)})`;
     });
-    return lines.map((connections, i) => `Q${i}: ${connections === ' ' ? 'None' : connections}`).join('\n');
+    return lines.join('\n');
   }
 }
