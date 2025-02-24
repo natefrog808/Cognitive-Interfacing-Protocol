@@ -1,49 +1,61 @@
 import * as tf from '@tensorflow/tfjs';
 import { defineComponent, Types } from 'bitecs';
 import { mean, std } from 'mathjs';
-import { PredictiveMonitor } from './PredictiveMonitor'; // Assuming this exists
+import { PredictiveMonitor } from './PredictiveMonitor';
 import { CognitiveWebSocketServer } from './CognitiveWebSocketServer';
+import { QuantumStateEncoder } from './quantum/QuantumStateEncoder';
+import { NeuralSynchronizer } from './neural/NeuralSynchronizer';
+import { AdvancedAnomalyDetector } from './anomaly/AdvancedAnomalyDetector';
 
 // Enhanced ML Model State Component
 const MLModelState = defineComponent({
-  isTraining: Types.ui8,         // 0 = idle, 1 = training
-  lastTrainingTime: Types.ui32,  // Timestamp (ms)
-  predictionAccuracy: Types.f32, // 0-1
-  modelVersion: Types.ui32,      // Incremental version
-  dataPoints: Types.ui32,        // Number of buffered points
-  loss: Types.f32,               // Latest training loss
-  confidenceInterval: Types.f32  // Width of 95% CI for predictions
+  isTraining: Types.ui8,
+  lastTrainingTime: Types.ui32,
+  predictionAccuracy: Types.f32,
+  modelVersion: Types.ui32,
+  dataPoints: Types.ui32,
+  loss: Types.f32,
+  confidenceInterval: Types.f32,
+  quantumInfluence: Types.f32,   // New: Quantum coherence impact
+  anomalySensitivity: Types.f32  // New: Anomaly-driven retraining trigger
 });
 
 interface TimeSeriesWindow {
   features: number[][]; // Multi-dimensional input
-  labels: number[][];   // Multi-dimensional output (all features)
+  labels: number[][];   // Multi-dimensional output
 }
 
 export class MLPredictor {
   private model: tf.LayersModel | null = null;
-  private sequenceLength: number = 12; // Increased for better context
-  private predictionHorizon: number = 6; // Slightly longer horizon
-  private features: string[] = ['cpuUsage', 'memoryUsage', 'networkLatency', 'errorRate'];
+  private sequenceLength: number = 12;
+  private predictionHorizon: number = 6;
+  private features: string[] = ['cpuUsage', 'memoryUsage', 'networkLatency', 'errorRate', 'quantumCoherence', 'anomalyScore'];
   private dataBuffer: Map<string, number[][]> = new Map();
   private readonly BUFFER_SIZE = 1000;
-  private readonly RETRAIN_THRESHOLD = 0.1; // Retrain if accuracy drops below this
+  private RETRAIN_THRESHOLD = 0.1; // Dynamic now
   private monitor: PredictiveMonitor;
   private wsServer: CognitiveWebSocketServer;
-  private scaler: { mean: number[]; std: number[] }; // For feature scaling
+  private quantumEncoder: QuantumStateEncoder;
+  private neuralSync: NeuralSynchronizer;
+  private anomalyDetector: AdvancedAnomalyDetector;
+  private scaler: { mean: number[]; std: number[] };
 
   constructor(wsPort: number = 8080) {
     this.monitor = new PredictiveMonitor(wsPort);
     this.wsServer = new CognitiveWebSocketServer(wsPort);
+    this.quantumEncoder = new QuantumStateEncoder();
+    this.neuralSync = new NeuralSynchronizer();
+    this.anomalyDetector = new AdvancedAnomalyDetector();
     this.scaler = { mean: this.features.map(() => 0), std: this.features.map(() => 1) };
   }
 
   async initialize() {
+    await this.quantumEncoder.initialize();
+    await this.neuralSync.initialize(0.5);
     this.model = tf.sequential();
 
-    // Enhanced architecture: Bidirectional LSTM + Attention
     this.model.add(tf.layers.lstm({
-      units: 64,
+      units: 128, // Boosted for richer patterns
       returnSequences: true,
       inputShape: [this.sequenceLength, this.features.length]
     }));
@@ -52,18 +64,19 @@ export class MLPredictor {
       layer: tf.layers.lstm({ units: 64, returnSequences: true }) as any,
       mergeMode: 'concat'
     }));
+    this.model.add(tf.layers.attention()); // New: Attention for key trends
     this.model.add(tf.layers.dropout({ rate: 0.2 }));
     this.model.add(tf.layers.timeDistributed({
       layer: tf.layers.dense({ units: this.features.length, activation: 'linear' })
     }));
 
     this.model.compile({
-      optimizer: tf.train.adam(0.0005), // Lower learning rate for stability
+      optimizer: tf.train.adam(0.0003), // Finer tuning
       loss: 'meanSquaredError',
-      metrics: ['mae'] // Mean Absolute Error for interpretability
+      metrics: ['mae']
     });
 
-    await this.loadModelIfExists(entityId); // Load saved model if available
+    console.log("MLPredictor initialized—ready to forecast the future!");
   }
 
   async addDataPoint(entityId: string, metrics: {
@@ -73,33 +86,34 @@ export class MLPredictor {
     errorRate: number;
     timestamp: number;
   }) {
-    if (!this.dataBuffer.has(entityId)) {
-      this.dataBuffer.set(entityId, []);
-    }
+    if (!this.dataBuffer.has(entityId)) this.dataBuffer.set(entityId, []);
 
     const buffer = this.dataBuffer.get(entityId)!;
-    const dataPoint = this.features.map(f => metrics[f]);
+    const quantumState = await this.quantumEncoder.createQuantumRegister(entityId);
+    const quantumCoherence = this.quantumEncoder.measureState(quantumState).coherence;
+    const baseData = this.features.slice(0, 4).map(f => metrics[f]);
+    this.anomalyDetector.updateData(entityId, baseData, { coherence: quantumCoherence });
+    const anomaly = this.anomalyDetector.detectAnomalies(entityId, baseData);
+    const dataPoint = [...baseData, quantumCoherence, anomaly.score];
     const scaledPoint = this.scaleDataPoint(dataPoint);
     buffer.push(scaledPoint);
 
-    if (buffer.length > this.BUFFER_SIZE) {
-      buffer.shift();
-    }
+    if (buffer.length > this.BUFFER_SIZE) buffer.shift();
 
     const id = parseInt(entityId);
     MLModelState.dataPoints[id] = buffer.length;
+    MLModelState.quantumInfluence[id] = quantumCoherence;
+    MLModelState.anomalySensitivity[id] = anomaly.forecastScore;
 
-    // Update scaler with running statistics
     this.updateScaler(buffer);
 
-    // Retrain if accuracy drops or enough new data
     if (buffer.length >= this.sequenceLength * 2 && this.shouldRetrain(id)) {
       await this.trainModel(entityId);
       await this.saveModel(entityId);
     }
 
-    // Update system health via PredictiveMonitor
     this.monitor.updateMetrics(entityId, metrics);
+    this.wsServer.broadcastStateUpdate(entityId, { metrics, anomaly, modelState: this.getModelState(id) });
   }
 
   private prepareTimeSeriesData(entityId: string): TimeSeriesWindow[] {
@@ -135,9 +149,10 @@ export class MLPredictor {
         validationSplit: 0.2,
         callbacks: {
           onEpochEnd: async (epoch, logs) => {
-            const accuracy = 1 - (logs?.mae ?? 0); // MAE-based accuracy
+            const accuracy = 1 - (logs?.mae ?? 0);
             MLModelState.predictionAccuracy[id] = accuracy;
             MLModelState.loss[id] = logs?.loss ?? 0;
+            this.RETRAIN_THRESHOLD = Math.max(0.05, 0.2 - accuracy * 0.1); // Adaptive threshold
             console.log(`Entity ${entityId} - Epoch ${epoch}: MAE = ${logs?.mae}, Accuracy = ${accuracy}`);
           },
           onTrainEnd: () => {
@@ -148,9 +163,7 @@ export class MLPredictor {
         }
       });
 
-      xs.dispose();
-      ys.dispose();
-
+      tf.dispose([xs, ys]);
       this.wsServer.broadcastStateUpdate(entityId, {
         mlModelState: this.getModelState(id),
         trainingHistory: history.history
@@ -163,9 +176,11 @@ export class MLPredictor {
   }
 
   async predict(entityId: string, steps: number = 6): Promise<{
-    predictions: number[][]; // Multi-feature predictions
+    predictions: number[][];        // Multi-feature predictions
     confidence: number;
-    confidenceInterval: [number, number][]; // 95% CI per step
+    confidenceInterval: [number, number][]; // Per-step CI
+    emergentState: any;             // New: Predicted emergent state
+    trendVector: number[];          // New: Trend direction
   }> {
     if (!this.model) throw new Error('Model not initialized');
 
@@ -184,15 +199,13 @@ export class MLPredictor {
 
       for (let i = 0; i < steps; i++) {
         const prediction = await this.model.predict(tf.tensor3d([currentInput])) as tf.Tensor;
-        const predictionData = await prediction.data();
-        const predVector = Array.from(predictionData).map(v => this.unscaleValue(v, 0)); // Unscale CPU usage (index 0)
+        const predVector = Array.from(await prediction.data()).map((v, idx) => this.unscaleValue(v, idx));
         
-        // Monte Carlo dropout for variance estimation
         const dropoutPreds = await this.monteCarloDropout(currentInput, 10);
-        const variance = std(dropoutPreds.map(p => p[0])) || 0;
+        const variance = mean(dropoutPreds.map(p => std(p) || 0));
         variances.push(variance);
 
-        predictions.push(predVector.map((v, idx) => this.unscaleValue(v, idx)));
+        predictions.push(predVector);
         currentInput = [...currentInput.slice(1), predVector];
         prediction.dispose();
       }
@@ -200,20 +213,33 @@ export class MLPredictor {
       const id = parseInt(entityId);
       const modelAccuracy = MLModelState.predictionAccuracy[id] || 0;
       const predictionVariance = mean(variances);
-      const confidence = Math.max(0, modelAccuracy * (1 - predictionVariance));
+      const confidence = Math.max(0, modelAccuracy * (1 - predictionVariance) * (1 + MLModelState.quantumInfluence[id]));
       const confidenceInterval = predictions.map((p, i) => {
-        const ciWidth = 1.96 * Math.sqrt(variances[i]); // 95% CI
+        const ciWidth = 1.96 * Math.sqrt(variances[i]);
         return [Math.max(0, p[0] - ciWidth), Math.min(1, p[0] + ciWidth)];
       });
 
       MLModelState.confidenceInterval[id] = confidenceInterval[0][1] - confidenceInterval[0][0];
 
+      // Generate emergent state
+      const lastPred = predictions[predictions.length - 1];
+      const emergentState = await this.neuralSync.generateNovelState({
+        cognitive: { awareness: lastPred[0], coherence: lastPred[2] / 50 }, // Network latency scaled
+        emotional: { stress: lastPred[3], motivation: MLModelState.quantumInfluence[id] }
+      }, confidence);
+
+      // Calculate trend vector
+      const trendVector = this.features.map((_, idx) => {
+        const series = predictions.map(p => p[idx]);
+        return series[series.length - 1] - series[0];
+      });
+
       this.wsServer.broadcastStateUpdate(entityId, {
-        mlPredictions: { predictions, confidence, confidenceInterval },
+        mlPredictions: { predictions, confidence, confidenceInterval, emergentState, trendVector },
         modelState: this.getModelState(id)
       });
 
-      return { predictions, confidence, confidenceInterval };
+      return { predictions, confidence, confidenceInterval, emergentState, trendVector };
     } finally {
       inputTensor.dispose();
     }
@@ -247,8 +273,10 @@ export class MLPredictor {
 
   private shouldRetrain(entityId: number): boolean {
     const accuracy = MLModelState.predictionAccuracy[entityId] || 0;
+    const anomalySens = MLModelState.anomalySensitivity[entityId] || 0;
     const dataPoints = MLModelState.dataPoints[entityId];
-    return accuracy < this.RETRAIN_THRESHOLD || (dataPoints > this.BUFFER_SIZE * 0.5 && Date.now() - MLModelState.lastTrainingTime[entityId] > 24 * 60 * 60 * 1000); // Retrain daily if enough data
+    return (accuracy < this.RETRAIN_THRESHOLD + anomalySens * 0.2) || 
+           (dataPoints > this.BUFFER_SIZE * 0.5 && Date.now() - MLModelState.lastTrainingTime[entityId] > 12 * 60 * 60 * 1000);
   }
 
   private async saveModel(entityId: string) {
@@ -276,17 +304,21 @@ export class MLPredictor {
       modelVersion: MLModelState.modelVersion[id],
       dataPoints: MLModelState.dataPoints[id],
       loss: MLModelState.loss[id],
-      confidenceInterval: MLModelState.confidenceInterval[id]
+      confidenceInterval: MLModelState.confidenceInterval[id],
+      quantumInfluence: MLModelState.quantumInfluence[id],
+      anomalySensitivity: MLModelState.anomalySensitivity[id]
     };
   }
 
-  // New: Visualize predictions
   visualizePredictions(entityId: string, predictions: number[][], confidenceInterval: [number, number][]): string {
+    const labels = ['CPU', 'Mem', 'Lat', 'Err', 'Qnt', 'Ano'];
     const lines = predictions.map((p, i) => {
       const ci = confidenceInterval[i];
-      const barLength = Math.round(p[0] * 20); // Scale CPU usage to 20 chars
-      const ciBar = `${Math.round(ci[0] * 100)}-${Math.round(ci[1] * 100)}`;
-      return `Step ${i + 1}: ${'█'.repeat(barLength)} (${p[0].toFixed(2)}) [CI: ${ciBar}]`;
+      const bars = p.map((v, idx) => {
+        const barLength = Math.round(v * (idx === 2 ? 0.4 : 20)); // Scale latency differently
+        return `${labels[idx]}: ${'█'.repeat(barLength)} (${v.toFixed(2)})`;
+      });
+      return `Step ${i + 1}: ${bars.join(' | ')} [CI: ${ci[0].toFixed(2)}-${ci[1].toFixed(2)}]`;
     });
     return lines.join('\n');
   }
