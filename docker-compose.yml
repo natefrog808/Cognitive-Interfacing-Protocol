@@ -1,0 +1,24 @@
+version: '3'
+services:
+  cogniverse:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - WS_PORT=8080
+      - SECRET_KEY=${SECRET_KEY}
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+
+volumes:
+  grafana-data:
