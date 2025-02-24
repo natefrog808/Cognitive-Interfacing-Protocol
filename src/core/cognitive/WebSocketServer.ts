@@ -4,7 +4,16 @@ import { PredictiveMonitor } from './PredictiveMonitor';
 import { AdvancedAnomalyDetector } from './AdvancedAnomalyDetector';
 import { CognitiveChannel } from './CognitiveChannel';
 import { NeuralSynchronizer } from './neural/NeuralSynchronizer';
+import { Server } from 'ws';
+import { readFileSync } from 'fs';
+import { createServer } from 'https';
 
+const httpsServer = createServer({
+  cert: readFileSync('/path/to/cert.pem'),
+  key: readFileSync('/path/to/key.pem')
+});
+const wsServer = new Server({ server: httpsServer });
+httpsServer.listen(PORT);
 // Define monitoring system interface
 interface MonitoringSystem {
   monitor: PredictiveMonitor;
