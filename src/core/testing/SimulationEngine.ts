@@ -1,21 +1,23 @@
-import { defineComponent, Types, createWorld } from 'bitecs';
+import { defineComponent, Types, createWorld, IWorld } from 'bitecs';
 import { NeuralSynchronizer } from '../neural/NeuralSynchronizer';
 import { QuantumStateEncoder } from '../quantum/QuantumStateEncoder';
 import { EmergentBehaviorAnalyzer } from '../emergence/EmergentBehaviorAnalyzer';
 import { MLPredictor } from '../MLPredictor';
-import { CognitiveWebSocketServer } from '../CognitiveWebSocketServer';
+import { CognitiveWebSocketServer } from './CognitiveWebSocketServer';
 import * as tf from '@tensorflow/tfjs';
 import { mean, std } from 'mathjs';
 
 // Enhanced Simulation Metrics Component
 const SimulationMetrics = defineComponent({
-  executionTime: Types.ui32,     // ms
-  memoryUsage: Types.ui32,       // Bytes
-  operationsCount: Types.ui32,   // Number of operations
-  successRate: Types.f32,        // 0-1
-  errorRate: Types.f32,          // 0-1
-  complexityIndex: Types.f32,    // Derived from emergent patterns
-  agentSyncRate: Types.f32       // Average sync frequency
+  executionTime: Types.ui32,
+  memoryUsage: Types.ui32,
+  operationsCount: Types.ui32,
+  successRate: Types.f32,
+  errorRate: Types.f32,
+  complexityIndex: Types.f32,
+  agentSyncRate: Types.f32,
+  quantumImpact: Types.f32,    // New: Quantum entanglement influence (0-1)
+  anomalyScore: Types.f32      // New: Anomaly detection score (0-1)
 });
 
 // Enhanced Simulation Components
@@ -29,7 +31,8 @@ const AgentState = defineComponent({
   behavioralAggressiveness: Types.f32,
   behavioralCooperation: Types.f32,
   behavioralAdaptability: Types.f32,
-  lastInteractionTime: Types.ui32
+  lastInteractionTime: Types.ui32,
+  quantumEntanglement: Types.f32 // New: Quantum entanglement score (0-1)
 });
 
 interface SimulationScenario {
@@ -39,8 +42,8 @@ interface SimulationScenario {
   agents: AgentConfig[];
   interactions: InteractionRule[];
   expectedPatterns: ExpectedPattern[];
-  duration: number; // ms
-  complexity: number; // 0-1
+  duration: number;
+  complexity: number;
 }
 
 interface AgentConfig {
@@ -60,12 +63,12 @@ interface InteractionRule {
 interface ExpectedPattern {
   type: 'cyclic' | 'emergent' | 'cascade' | 'stable';
   participants: number;
-  timeframe: [number, number]; // ms range
+  timeframe: [number, number];
   confidence: number;
 }
 
 export class SimulationEngine {
-  private world = createWorld();
+  private world: IWorld;
   private neural: NeuralSynchronizer;
   private quantum: QuantumStateEncoder;
   private emergence: EmergentBehaviorAnalyzer;
@@ -73,10 +76,12 @@ export class SimulationEngine {
   private wsServer: CognitiveWebSocketServer;
   private scenarios: Map<string, SimulationScenario> = new Map();
   private results: Map<string, SimulationResult> = new Map();
-  private agentEntities: Map<string, number> = new Map(); // Maps agent IDs to BitECS entities
-  private stepInterval: number = 1000; // ms per step
+  private agentEntities: Map<string, number> = new Map();
+  private baseStepInterval: number = 1000; // ms per step
+  private running: boolean = false;
 
   constructor(wsPort: number = 8080) {
+    this.world = createWorld();
     this.neural = new NeuralSynchronizer();
     this.quantum = new QuantumStateEncoder(wsPort);
     this.emergence = new EmergentBehaviorAnalyzer();
@@ -92,6 +97,7 @@ export class SimulationEngine {
       this.emergence.initialize(),
       this.predictor.initialize()
     ]);
+    console.log("SimulationEngine initialized—ready to rock the test stage!");
   }
 
   async loadScenario(scenario: SimulationScenario): Promise<void> {
@@ -121,7 +127,8 @@ export class SimulationEngine {
 
   private initializeAgent(config: AgentConfig): number {
     const eid = this.world.addEntity();
-    this.quantum.createQuantumRegister(config.id);
+    const register = this.quantum.createQuantumRegister(config.id);
+    const entanglement = this.quantum.calculateEntanglementMetrics(register).score;
 
     AgentState.cognitiveAwareness[eid] = config.cognitive.awareness;
     AgentState.cognitiveCoherence[eid] = config.cognitive.coherence;
@@ -133,6 +140,7 @@ export class SimulationEngine {
     AgentState.behavioralCooperation[eid] = config.behavioral.cooperation;
     AgentState.behavioralAdaptability[eid] = config.behavioral.adaptability;
     AgentState.lastInteractionTime[eid] = Date.now();
+    AgentState.quantumEntanglement[eid] = entanglement;
 
     return eid;
   }
@@ -140,18 +148,20 @@ export class SimulationEngine {
   async runSimulation(scenarioId: string, options: SimulationOptions = {}): Promise<SimulationResult> {
     const scenario = this.scenarios.get(scenarioId);
     if (!scenario) throw new Error(`Scenario ${scenarioId} not found`);
+    if (this.running) throw new Error('Simulation already running');
 
+    this.running = true;
     const startTime = Date.now();
     const metrics = this.initializeMetrics();
     const events: SimulationEvent[] = [];
-    const maxSteps = options.maxSteps || Math.ceil(scenario.duration / this.stepInterval);
+    const maxSteps = options.maxSteps || Math.ceil(scenario.duration / this.baseStepInterval);
     const timeoutMs = options.timeoutMs || scenario.duration * 2;
 
     try {
       let step = 0;
       const timeout = setTimeout(() => { throw new Error('Simulation timeout'); }, timeoutMs);
 
-      while (step < maxSteps) {
+      while (this.running && step < maxSteps) {
         const stepEvents = await this.simulationStep(scenario, step, metrics);
         events.push(...stepEvents);
 
@@ -161,7 +171,7 @@ export class SimulationEngine {
 
         if (this.shouldTerminateEarly(patterns, metrics)) break;
 
-        await new Promise(resolve => setTimeout(resolve, this.stepInterval));
+        await new Promise(resolve => setTimeout(resolve, this.baseStepInterval / (1 + scenario.complexity)));
         step++;
       }
 
@@ -169,11 +179,13 @@ export class SimulationEngine {
       const result = await this.generateResult(scenario, events, metrics, startTime);
       this.results.set(scenarioId, result);
       this.wsServer.broadcastStateUpdate(scenarioId, { event: 'simulation_complete', result });
+      this.running = false;
       return result;
 
     } catch (error) {
       metrics.errorRate = Math.min(1, metrics.errorRate + 0.1);
       this.wsServer.broadcastAlert(scenarioId, { type: 'simulation_error', severity: 'error', message: error.message });
+      this.running = false;
       throw error;
     }
   }
@@ -182,12 +194,9 @@ export class SimulationEngine {
     const events: SimulationEvent[] = [];
     const agents = scenario.agents.map(a => this.agentEntities.get(a.id)!);
 
-    // Adaptive step interval based on complexity
-    this.stepInterval = 1000 / (1 + scenario.complexity);
-
     for (const rule of scenario.interactions) {
       if (Math.random() < rule.probability * (1 + scenario.complexity * 0.5)) {
-        const event = await this.processInteraction(rule, agents);
+        const event = await this.processInteraction(rule, agents, metrics);
         events.push(event);
         metrics.operationsCount++;
       }
@@ -197,10 +206,11 @@ export class SimulationEngine {
       await this.updateAgentState(agent, events, metrics);
     }
 
+    metrics.anomalyScore = this.calculateAnomalyScore(agents);
     return events;
   }
 
-  private async processInteraction(rule: InteractionRule, agents: number[]): Promise<SimulationEvent> {
+  private async processInteraction(rule: InteractionRule, agents: number[], metrics: SimulationMetrics): Promise<SimulationEvent> {
     const participantIds = rule.participants;
     const participantEids = participantIds.map(id => this.agentEntities.get(id)!);
     const states = participantEids.map(eid => ({
@@ -213,13 +223,19 @@ export class SimulationEngine {
         mood: AgentState.emotionalMood[eid],
         stress: AgentState.emotionalStress[eid],
         motivation: AgentState.emotionalMotivation[eid]
+      },
+      behavioral: {
+        aggressiveness: AgentState.behavioralAggressiveness[eid],
+        cooperation: AgentState.behavioralCooperation[eid],
+        adaptability: AgentState.behavioralAdaptability[eid]
       }
     }));
 
     let effectApplied = false;
+    let syncResult: any;
     switch (rule.type) {
       case 'sync':
-        const syncResult = await this.neural.synchronizeStates(states[0], states[1], rule.effect.magnitude);
+        syncResult = await this.neural.synchronizeStates(states[0], states[1], rule.effect.magnitude);
         this.applySyncEffect(participantEids, syncResult);
         effectApplied = true;
         break;
@@ -238,7 +254,11 @@ export class SimulationEngine {
     }
 
     if (effectApplied) {
-      participantEids.forEach(eid => AgentState.lastInteractionTime[eid] = Date.now());
+      participantEids.forEach(eid => {
+        AgentState.lastInteractionTime[eid] = Date.now();
+        AgentState.quantumEntanglement[eid] = this.quantum.calculateEntanglementMetrics(this.quantum.createQuantumRegister(participantIds[0])).score;
+      });
+      metrics.quantumImpact = mean(participantEids.map(eid => AgentState.quantumEntanglement[eid]));
     }
 
     return {
@@ -246,7 +266,8 @@ export class SimulationEngine {
       participants: participantIds,
       timestamp: Date.now(),
       effect: rule.effect,
-      success: effectApplied
+      success: effectApplied,
+      coherence: syncResult?.coherenceScore || 0
     };
   }
 
@@ -264,7 +285,7 @@ export class SimulationEngine {
 
   private processCompetition(states: any[], effect: any, participants: number[]) {
     const winnerIdx = states.reduce((maxIdx, curr, idx, arr) => 
-      curr.behavioralAggressiveness > arr[maxIdx].behavioralAggressiveness ? idx : maxIdx, 0);
+      curr.behavioral.aggressiveness > arr[maxIdx].behavioral.aggressiveness ? idx : maxIdx, 0);
     participants.forEach((eid, idx) => {
       if (idx === winnerIdx) {
         AgentState.emotionalMotivation[eid] += effect.magnitude;
@@ -276,7 +297,7 @@ export class SimulationEngine {
   }
 
   private processCooperation(states: any[], effect: any, participants: number[]) {
-    const avgCoop = mean(states.map(s => s.behavioralCooperation));
+    const avgCoop = mean(states.map(s => s.behavioral.cooperation));
     participants.forEach(eid => {
       AgentState.emotionalMood[eid] += effect.magnitude * avgCoop;
       AgentState.cognitiveCoherence[eid] += effect.magnitude * 0.5 * avgCoop;
@@ -295,22 +316,20 @@ export class SimulationEngine {
 
   private async updateAgentState(agent: AgentConfig, events: SimulationEvent[], metrics: SimulationMetrics) {
     const eid = this.agentEntities.get(agent.id)!;
-    const timeSinceLast = (Date.now() - AgentState.lastInteractionTime[eid]) / 1000; // Seconds
-    const decay = Math.min(0.1, timeSinceLast * 0.01); // Gradual decay
+    const timeSinceLast = (Date.now() - AgentState.lastInteractionTime[eid]) / 1000;
+    const decay = Math.min(0.1, timeSinceLast * 0.01);
 
-    // Apply natural decay and adaptability
     AgentState.emotionalStress[eid] = Math.max(0, AgentState.emotionalStress[eid] - decay * AgentState.behavioralAdaptability[eid]);
     AgentState.emotionalMotivation[eid] = Math.max(0, AgentState.emotionalMotivation[eid] - decay * 0.5);
     AgentState.cognitiveCoherence[eid] = Math.max(0, AgentState.cognitiveCoherence[eid] - decay * 0.2);
 
-    // Quantum state update
     const state = {
       cognitive: { awareness: AgentState.cognitiveAwareness[eid], coherence: AgentState.cognitiveCoherence[eid], complexity: AgentState.cognitiveComplexity[eid] },
       emotional: { mood: AgentState.emotionalMood[eid], stress: AgentState.emotionalStress[eid], motivation: AgentState.emotionalMotivation[eid] }
     };
-    this.quantum.encodeState(state, agent.id);
+    const register = this.quantum.encodeState(state, agent.id);
+    AgentState.quantumEntanglement[eid] = this.quantum.calculateEntanglementMetrics(register).score;
 
-    // Update metrics with ML prediction
     const predMetrics = {
       cpuUsage: AgentState.cognitiveComplexity[eid],
       memoryUsage: AgentState.cognitiveCoherence[eid],
@@ -323,7 +342,7 @@ export class SimulationEngine {
 
   private validatePatterns(patterns: any, expectedPatterns: ExpectedPattern[], metrics: SimulationMetrics) {
     expectedPatterns.forEach(expected => {
-      const matched = patterns.patterns.some(p => 
+      const matched = patterns.patterns.some((p: any) => 
         p.type === expected.type &&
         p.participants.length >= expected.participants &&
         p.startTime >= expected.timeframe[0] &&
@@ -331,11 +350,12 @@ export class SimulationEngine {
         p.confidence >= expected.confidence
       );
       if (matched) metrics.successRate = Math.min(1, metrics.successRate + 1 / expectedPatterns.length);
+      else metrics.errorRate = Math.min(1, metrics.errorRate + 0.05);
     });
   }
 
   private shouldTerminateEarly(patterns: any, metrics: SimulationMetrics): boolean {
-    return metrics.errorRate > 0.5 || metrics.successRate >= 0.95 || patterns.patterns.length > 10 * this.scenarios.size; // Excessive complexity
+    return metrics.errorRate > 0.5 || metrics.successRate >= 0.95 || patterns.patterns.length > 10 * this.scenarios.size || metrics.anomalyScore > 0.8;
   }
 
   private async generateResult(scenario: SimulationScenario, events: SimulationEvent[], metrics: SimulationMetrics, startTime: number): Promise<SimulationResult> {
@@ -343,10 +363,9 @@ export class SimulationEngine {
     metrics.executionTime = Date.now() - startTime;
     metrics.memoryUsage = process.memoryUsage().heapUsed;
     metrics.complexityIndex = patterns.metrics.systemComplexity;
-    metrics.agentSyncRate = events.filter(e => e.type === 'sync').length / (scenario.duration / this.stepInterval);
+    metrics.agentSyncRate = events.filter(e => e.type === 'sync').length / (scenario.duration / this.baseStepInterval);
 
-    this.world.addEntity();
-    const eid = this.world.entities[this.world.entities.length - 1];
+    const eid = this.world.addEntity();
     SimulationMetrics.executionTime[eid] = metrics.executionTime;
     SimulationMetrics.memoryUsage[eid] = metrics.memoryUsage;
     SimulationMetrics.operationsCount[eid] = metrics.operationsCount;
@@ -354,6 +373,8 @@ export class SimulationEngine {
     SimulationMetrics.errorRate[eid] = metrics.errorRate;
     SimulationMetrics.complexityIndex[eid] = metrics.complexityIndex;
     SimulationMetrics.agentSyncRate[eid] = metrics.agentSyncRate;
+    SimulationMetrics.quantumImpact[eid] = metrics.quantumImpact;
+    SimulationMetrics.anomalyScore[eid] = metrics.anomalyScore;
 
     return {
       scenarioId: scenario.id,
@@ -373,15 +394,17 @@ export class SimulationEngine {
       successRate: 0,
       errorRate: 0,
       complexityIndex: 0,
-      agentSyncRate: 0
+      agentSyncRate: 0,
+      quantumImpact: 0,
+      anomalyScore: 0
     };
   }
 
   private broadcastStepUpdate(scenarioId: string, step: number, events: SimulationEvent[], patterns: any, metrics: SimulationMetrics) {
     this.wsServer.broadcastStateUpdate(scenarioId, {
       step,
-      events: events.slice(-5), // Last 5 for brevity
-      patterns: patterns.patterns.slice(-3), // Last 3 patterns
+      events: events.slice(-5),
+      patterns: patterns.patterns.slice(-3),
       metrics,
       visualization: this.visualizeSimulation(this.scenarios.get(scenarioId)!, events, patterns, step)
     });
@@ -405,7 +428,8 @@ export class SimulationEngine {
           aggressiveness: AgentState.behavioralAggressiveness[eid],
           cooperation: AgentState.behavioralCooperation[eid],
           adaptability: AgentState.behavioralAdaptability[eid]
-        }
+        },
+        quantumEntanglement: AgentState.quantumEntanglement[eid]
       });
     });
     return states;
@@ -417,11 +441,100 @@ export class SimulationEngine {
       scenario.interactions.forEach(interaction => {
         interaction.participants.forEach(id => {
           if (!relationships.has(id)) relationships.set(id, []);
-          relationships.get(id)!.push(...interaction.participants.filter(p => p !== id));
+          relationships.get(id)!.push(...interaction.participants.filter(p => p !== id).map(p => ({ id: p })));
         });
       });
     });
     return relationships;
+  }
+
+  private calculateAnomalyScore(agents: number[]): number {
+    const states = agents.map(eid => [
+      AgentState.cognitiveAwareness[eid],
+      AgentState.emotionalStress[eid],
+      AgentState.cognitiveComplexity[eid]
+    ]);
+    return mean(states.map(state => this.anomalyDetector.detectAnomalies("test", state).score));
+  }
+
+  async testScenario(scenarioId: string, testOptions: TestOptions = {}): Promise<TestReport> {
+    const scenario = this.scenarios.get(scenarioId);
+    if (!scenario) throw new Error(`Scenario ${scenarioId} not found`);
+
+    const simOptions: SimulationOptions = {
+      maxSteps: testOptions.maxSteps || 100,
+      timeoutMs: testOptions.timeoutMs || 60000,
+      detailedLogging: testOptions.detailedLogging || false
+    };
+
+    const result = await this.runSimulation(scenarioId, simOptions);
+    const analysis = await this.analyzeResults(scenarioId);
+
+    const testReport: TestReport = {
+      scenarioId,
+      result,
+      analysis,
+      validation: this.validateTestResult(result, scenario.expectedPatterns, testOptions.expectedMetrics),
+      performanceScore: this.calculatePerformanceScore(result, analysis),
+      recommendations: analysis.recommendations.concat(this.generateTestRecommendations(result, testOptions))
+    };
+
+    this.wsServer.broadcastStateUpdate(scenarioId, { event: 'test_complete', testReport });
+    return testReport;
+  }
+
+  private validateTestResult(result: SimulationResult, expectedPatterns: ExpectedPattern[], expectedMetrics?: ExpectedMetrics): TestValidation {
+    const patternValidation = expectedPatterns.map(expected => {
+      const matched = result.patterns.patterns.some((p: any) => 
+        p.type === expected.type &&
+        p.participants.length >= expected.participants &&
+        p.startTime >= expected.timeframe[0] &&
+        p.startTime <= expected.timeframe[1] &&
+        p.confidence >= expected.confidence
+      );
+      return { type: expected.type, passed: matched };
+    });
+
+    const metricsValidation = expectedMetrics ? {
+      successRate: result.metrics.successRate >= (expectedMetrics.successRate || 0),
+      errorRate: result.metrics.errorRate <= (expectedMetrics.errorRate || 1),
+      complexityIndex: Math.abs(result.metrics.complexityIndex - (expectedMetrics.complexityIndex || 0)) < 0.1
+    } : { successRate: true, errorRate: true, complexityIndex: true };
+
+    return {
+      patterns: patternValidation,
+      metrics: metricsValidation,
+      overallPass: patternValidation.every(p => p.passed) && Object.values(metricsValidation).every(v => v)
+    };
+  }
+
+  private calculatePerformanceScore(result: SimulationResult, analysis: AnalysisReport): number {
+    const weights = { success: 0.4, error: 0.3, complexity: 0.2, sync: 0.1 };
+    return (
+      weights.success * result.metrics.successRate +
+      weights.error * (1 - result.metrics.errorRate) +
+      weights.complexity * (1 - Math.abs(analysis.patterns.complexity - 0.5)) +
+      weights.sync * analysis.performance.syncFrequency / 10
+    );
+  }
+
+  private generateTestRecommendations(result: SimulationResult, options: TestOptions): Recommendation[] {
+    const recommendations: Recommendation[] = [];
+    if (result.metrics.anomalyScore > 0.5) {
+      recommendations.push({
+        type: 'anomaly',
+        priority: 'high',
+        description: 'High anomaly score detected. Investigate agent interactions for unexpected behavior.'
+      });
+    }
+    if (result.metrics.quantumImpact < 0.3) {
+      recommendations.push({
+        type: 'quantum',
+        priority: 'medium',
+        description: 'Low quantum impact. Enhance quantum entanglement in interactions.'
+      });
+    }
+    return recommendations;
   }
 
   async analyzeResults(scenarioId: string): Promise<AnalysisReport> {
@@ -440,8 +553,8 @@ export class SimulationEngine {
 
   private analyzePerformance(result: SimulationResult): PerformanceMetrics {
     return {
-      executionEfficiency: result.metrics.operationsCount / (result.duration / 1000), // Ops per second
-      resourceUtilization: result.metrics.memoryUsage / (1024 * 1024), // MB
+      executionEfficiency: result.metrics.operationsCount / (result.duration / 1000),
+      resourceUtilization: result.metrics.memoryUsage / (1024 * 1024),
       successRate: result.metrics.successRate,
       errorRate: result.metrics.errorRate,
       complexityIndex: result.metrics.complexityIndex,
@@ -455,7 +568,7 @@ export class SimulationEngine {
       dominantPatterns: this.emergence.findDominantPatternType(patterns.patterns),
       stability: this.emergence.calculateStabilityScore(patterns.patterns),
       complexity: this.emergence.calculateComplexity(patterns.patterns, this.getRelationships()),
-      emergenceRate: patterns.patterns.length / (result.duration / 1000) // Patterns per second
+      emergenceRate: patterns.patterns.length / (result.duration / 1000)
     };
   }
 
@@ -473,7 +586,7 @@ export class SimulationEngine {
     const pred = await this.predictor.predict(scenarioId, 6);
     return {
       predictedPatterns: pred.predictions.map(p => ({
-        type: p[1] > 0.5 ? 'stress_spike' : 'stable', // Simplified example
+        type: p[1] > 0.5 ? 'stress_spike' : 'stable',
         confidence: pred.confidence
       })),
       confidence: pred.confidence
@@ -482,8 +595,6 @@ export class SimulationEngine {
 
   private async generateRecommendations(result: SimulationResult): Promise<Recommendation[]> {
     const recommendations: Recommendation[] = [];
-    const patterns = result.patterns;
-
     if (result.metrics.errorRate > 0.1) {
       recommendations.push({
         type: 'performance',
@@ -491,23 +602,20 @@ export class SimulationEngine {
         description: 'High error rate detected. Reduce agent interaction frequency or increase adaptability.'
       });
     }
-
-    if (patterns.metrics.systemComplexity > 0.8) {
+    if (result.metrics.complexityIndex > 0.8) {
       recommendations.push({
         type: 'patterns',
         priority: 'medium',
         description: 'Excessive complexity detected. Simplify rules or reduce agent count.'
       });
     }
-
-    if (patterns.metrics.stabilityScore < 0.5) {
+    if (result.patterns.metrics.stabilityScore < 0.5) {
       recommendations.push({
         type: 'stability',
         priority: 'high',
         description: 'Low stability detected. Increase cooperation or reduce competition.'
       });
     }
-
     return recommendations;
   }
 
@@ -517,11 +625,11 @@ export class SimulationEngine {
       const state = agentStates.get(agent.id)!;
       const moodBar = '█'.repeat(Math.round(Math.abs(state.emotional.mood) * 10));
       const stressBar = '█'.repeat(Math.round(state.emotional.stress * 10));
-      return `${agent.id}: Mood[${state.emotional.mood > 0 ? '+' : ''}${moodBar}] Stress[${stressBar}]`;
+      return `${agent.id}: Mood[${state.emotional.mood > 0 ? '+' : ''}${moodBar}] Stress[${stressBar}] Q:${state.quantumEntanglement.toFixed(2)}`;
     });
 
-    const recentEvents = events.slice(-3).map(e => `${e.type}: ${e.participants.join(', ')}`);
-    const recentPatterns = patterns.patterns.slice(-2).map(p => `${p.type} (${p.confidence.toFixed(2)})`);
+    const recentEvents = events.slice(-3).map(e => `${e.type}: ${e.participants.join(', ')} (C:${e.coherence.toFixed(2)})`);
+    const recentPatterns = patterns.patterns.slice(-2).map((p: any) => `${p.type} (${p.confidence.toFixed(2)})`);
     const stepLine = step !== undefined ? `Step ${step}: ` : 'Final: ';
     return `${stepLine}\nAgents:\n${lines.join('\n')}\n\nEvents:\n${recentEvents.join('\n')}\n\nPatterns:\n${recentPatterns.join('\n')}`;
   }
@@ -533,12 +641,23 @@ interface SimulationOptions {
   detailedLogging?: boolean;
 }
 
+interface TestOptions extends SimulationOptions {
+  expectedMetrics?: ExpectedMetrics;
+}
+
+interface ExpectedMetrics {
+  successRate?: number;
+  errorRate?: number;
+  complexityIndex?: number;
+}
+
 interface SimulationEvent {
   type: string;
   participants: string[];
   timestamp: number;
   effect: any;
   success: boolean;
+  coherence: number; // Added for sync events
 }
 
 interface SimulationResult {
@@ -553,9 +672,26 @@ interface SimulationResult {
     errorRate: number;
     complexityIndex: number;
     agentSyncRate: number;
+    quantumImpact: number;
+    anomalyScore: number;
   };
   patterns: any;
   visualization: string;
+}
+
+interface TestReport {
+  scenarioId: string;
+  result: SimulationResult;
+  analysis: AnalysisReport;
+  validation: TestValidation;
+  performanceScore: number;
+  recommendations: Recommendation[];
+}
+
+interface TestValidation {
+  patterns: { type: string; passed: boolean }[];
+  metrics: { successRate: boolean; errorRate: boolean; complexityIndex: boolean };
+  overallPass: boolean;
 }
 
 interface AnalysisReport {
@@ -586,3 +722,41 @@ interface Recommendation {
   priority: 'low' | 'medium' | 'high';
   description: string;
 }
+
+// Example Test Module
+export async function runTestModule() {
+  const engine = new SimulationEngine();
+  await engine.initializeComponents();
+
+  const testScenario: SimulationScenario = {
+    id: "test_1",
+    name: "Basic Cooperation Test",
+    description: "Tests cooperation dynamics among 3 agents",
+    agents: [
+      { id: "agent1", cognitive: { awareness: 0.7, coherence: 0.8, complexity: 0.6 }, emotional: { mood: 0.5, stress: 0.2, motivation: 0.8 }, behavioral: { aggressiveness: 0.3, cooperation: 0.9, adaptability: 0.7 } },
+      { id: "agent2", cognitive: { awareness: 0.6, coherence: 0.7, complexity: 0.5 }, emotional: { mood: 0.4, stress: 0.3, motivation: 0.7 }, behavioral: { aggressiveness: 0.4, cooperation: 0.8, adaptability: 0.6 } },
+      { id: "agent3", cognitive: { awareness: 0.8, coherence: 0.9, complexity: 0.7 }, emotional: { mood: 0.6, stress: 0.1, motivation: 0.9 }, behavioral: { aggressiveness: 0.2, cooperation: 0.95, adaptability: 0.8 } }
+    ],
+    interactions: [
+      { type: "cooperate", participants: ["agent1", "agent2"], probability: 0.8, effect: { type: "boost", magnitude: 0.2, duration: 5000 } },
+      { type: "sync", participants: ["agent2", "agent3"], probability: 0.7, effect: { type: "align", magnitude: 0.3, duration: 3000 } }
+    ],
+    expectedPatterns: [
+      { type: "stable", participants: 3, timeframe: [0, 10000], confidence: 0.8 },
+      { type: "emergent", participants: 2, timeframe: [2000, 8000], confidence: 0.7 }
+    ],
+    duration: 10000,
+    complexity: 0.5
+  };
+
+  await engine.loadScenario(testScenario);
+  const report = await engine.testScenario("test_1", {
+    maxSteps: 10,
+    expectedMetrics: { successRate: 0.8, errorRate: 0.1, complexityIndex: 0.5 }
+  });
+
+  console.log("Test Report:", report);
+  return report;
+}
+
+runTestModule().catch(console.error);
